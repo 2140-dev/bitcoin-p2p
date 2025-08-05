@@ -1,9 +1,14 @@
 [package]
-name = "rust-template-repo"
+name = "bitcoin-p2p"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "bp2p"
+
 [dependencies]
+bitcoin = { git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "4a510e3b3039461c5a6f59e50096c0608b389cca", features = ["rand-std"] }
+p2p = { package = "bitcoin-p2p-messages",  git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "4a510e3b3039461c5a6f59e50096c0608b389cca" }
 
 [profile.release]
 opt-level = 3
