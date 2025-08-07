@@ -68,3 +68,34 @@ impl ValidationExt for NetworkMessage {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use bitcoin::BlockHash;
+    use p2p::{
+        ProtocolVersion, message::NetworkMessage, message_blockdata::Inventory,
+        message_network::Alert,
+    };
+
+    use crate::validation::ValidationExt;
+
+    const MALFORMED_BLOCKHASHES: [BlockHash; 102] = [BlockHash::from_byte_array([0; 32]); 102];
+
+    #[test]
+    fn test_validation_ext() {
+        let verack = NetworkMessage::Verack;
+        assert!(verack.is_handshake_message());
+        let sendheaders = NetworkMessage::SendHeaders;
+        assert!(!sendheaders.is_handshake_message());
+        let final_alert = NetworkMessage::Alert(Alert::final_alert());
+        assert!(!final_alert.is_discouraged());
+        let mempool = NetworkMessage::MemPool;
+        assert!(mempool.is_discouraged());
+        let getdata = NetworkMessage::GetBlocks(p2p::message_blockdata::GetBlocksMessage {
+            version: ProtocolVersion::WTXID_RELAY_VERSION,
+            locator_hashes: MALFORMED_BLOCKHASHES.to_vec(),
+            stop_hash: BlockHash::from_byte_array([0; 32]),
+        });
+        assert!(getdata.is_discouraged());
+    }
+}
