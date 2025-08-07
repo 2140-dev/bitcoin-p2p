@@ -7,8 +7,8 @@ edition = "2024"
 name = "bp2p"
 
 [dependencies]
-bitcoin = { git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "4a510e3b3039461c5a6f59e50096c0608b389cca", features = ["rand-std"] }
-p2p = { package = "bitcoin-p2p-messages",  git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "4a510e3b3039461c5a6f59e50096c0608b389cca" }
+bitcoin = { git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "55992efa68a1ec557eb546f5effd171e1a9fb896", features = ["rand-std"] }
+p2p = { package = "bitcoin-p2p-messages",  git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "55992efa68a1ec557eb546f5effd171e1a9fb896" }
 
 [profile.release]
 opt-level = 3
