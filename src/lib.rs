@@ -3,8 +3,20 @@ use std::{
     time::Instant,
 };
 
+use p2p::{ProtocolVersion, ServiceFlags};
+
 /// Tools for validating messages and data
 pub mod validation;
+/// Automated version negotiation with remote peers
+pub mod handshake;
+
+#[derive(Debug, Clone, Copy)]
+pub struct FeelerData {
+    pub effective_version: ProtocolVersion,
+    pub services: ServiceFlags,
+    pub net_time_difference: i64,
+    pub reported_height: i32,
+}
 
 #[derive(Debug)]
 pub struct Preferences {
