@@ -283,7 +283,7 @@ mod tests {
     }
 
     #[test]
-    fn test_inbound_handshake() {
+    fn test_outbound_handshake() {
         let mock = build_mock_version(ProtocolVersion::WTXID_RELAY_VERSION, ServiceFlags::NONE);
         let connection_config = ConnectionConfig::new();
         let nonce = 43;
@@ -323,7 +323,7 @@ mod tests {
     }
 
     #[test]
-    fn test_outbound_handshake() {
+    fn test_inbound_handshake() {
         let mock = build_mock_version(ProtocolVersion::WTXID_RELAY_VERSION, ServiceFlags::NONE);
         let connection_config = ConnectionConfig::new();
         let nonce = 43;
