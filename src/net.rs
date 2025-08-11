@@ -48,7 +48,7 @@ impl ConnectionExt for ConnectionConfig {
         self,
         to: SocketAddr,
     ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError> {
-        let tcp_stream = TcpStream::connect(to).map_err(Error::Io)?;
+        let tcp_stream = TcpStream::connect(to)?;
         Self::handshake(self, tcp_stream, Origin::OutBound)
     }
 
@@ -56,8 +56,8 @@ impl ConnectionExt for ConnectionConfig {
         self,
         bind: SocketAddr,
     ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError> {
-        let listener = TcpListener::bind(bind).map_err(Error::Io)?;
-        let (tcp_stream, _) = listener.accept().map_err(Error::Io)?;
+        let listener = TcpListener::bind(bind)?;
+        let (tcp_stream, _) = listener.accept()?;
         Self::handshake(self, tcp_stream, Origin::Inbound)
     }
 
