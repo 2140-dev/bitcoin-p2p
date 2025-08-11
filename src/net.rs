@@ -74,9 +74,7 @@ impl ConnectionExt for ConnectionConfig {
         let version = self.build_our_version(unix_time, nonce);
         let mut write_half = WriteTransport::V1(self.network().default_network_magic());
         let mut read_half = ReadTransport::V1(self.network().default_network_magic());
-        write_half
-            .write_message(NetworkMessage::Version(version), &mut tcp_stream)
-            .map_err(Error::Io)?;
+        write_half.write_message(NetworkMessage::Version(version), &mut tcp_stream)?;
         let (handshake, messages) = match read_half.read_message(&mut tcp_stream)? {
             Some(message) => self.start_handshake(unix_time, message, nonce, origin)?,
             None => return Err(ConnectionError::Other(Error::MissingVersion)),

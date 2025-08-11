@@ -139,14 +139,14 @@ impl ConnectionConfig {
             suggested_messages.push(version);
         }
         let effective_version = std::cmp::min(self.our_version, version.version);
-        if effective_version > ProtocolVersion::WTXID_RELAY_VERSION {
+        if effective_version >= ProtocolVersion::WTXID_RELAY_VERSION {
             suggested_messages.push(NetworkMessage::WtxidRelay);
         }
         // Weird case where this number is not a constant in Bitcoin Core
-        if effective_version > ProtocolVersion::from_nonstandard(70016) {
+        if effective_version >= ProtocolVersion::from_nonstandard(70016) {
             suggested_messages.push(NetworkMessage::SendAddrV2);
         }
-        if effective_version > ProtocolVersion::SENDHEADERS_VERSION {
+        if effective_version >= ProtocolVersion::SENDHEADERS_VERSION {
             suggested_messages.push(NetworkMessage::SendHeaders);
         } else {
             suggested_messages.push(NetworkMessage::Alert(Alert::final_alert()));
@@ -250,5 +250,160 @@ impl Display for Error {
             Error::IrrelevantMessage(irrelevant) => write!(f, "irrelevant message: {irrelevant}"),
             Error::MissingService(services) => write!(f, "missing services: {services}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use p2p::{
+        ProtocolVersion, ServiceFlags,
+        message::NetworkMessage,
+        message_network::{UserAgent, VersionMessage},
+    };
+
+    use super::{ConnectionConfig, Origin};
+
+    fn build_mock_version(
+        with_version: ProtocolVersion,
+        with_services: ServiceFlags,
+    ) -> VersionMessage {
+        VersionMessage {
+            version: with_version,
+            services: with_services,
+            timestamp: 222222222,
+            receiver: p2p::Address::useless(),
+            sender: p2p::Address::useless(),
+            nonce: 42,
+            user_agent: UserAgent::from_nonstandard("hello"),
+            start_height: 0,
+            relay: false,
+        }
+    }
+
+    #[test]
+    fn test_inbound_handshake() {
+        let mock = build_mock_version(ProtocolVersion::WTXID_RELAY_VERSION, ServiceFlags::NONE);
+        let connection_config = ConnectionConfig::new();
+        let nonce = 43;
+        let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        let (init_handshake, messages) = connection_config
+            .start_handshake(
+                system_time,
+                NetworkMessage::Version(mock),
+                nonce,
+                Origin::OutBound,
+            )
+            .unwrap();
+        let mut message_iter = messages.into_iter();
+        let nxt = message_iter.next().unwrap();
+        assert!(matches!(nxt, NetworkMessage::WtxidRelay));
+        let nxt = message_iter.next().unwrap();
+        assert!(matches!(nxt, NetworkMessage::SendAddrV2));
+        let nxt = message_iter.next().unwrap();
+        assert!(matches!(nxt, NetworkMessage::SendHeaders));
+        assert!(message_iter.next().is_none());
+        let message = NetworkMessage::WtxidRelay;
+        let nego = init_handshake.negotiate(message).unwrap();
+        assert!(nego.is_none());
+        let message = NetworkMessage::SendAddrV2;
+        let nego = init_handshake.negotiate(message).unwrap();
+        assert!(nego.is_none());
+        let message = NetworkMessage::Verack;
+        let (completed, messages) = init_handshake.negotiate(message).unwrap().unwrap();
+        let mut message_iter = messages.into_iter();
+        let fee_filter = message_iter.next().unwrap();
+        assert!(matches!(fee_filter, NetworkMessage::SendCmpct(_)));
+        let fee_filter = message_iter.next().unwrap();
+        assert!(matches!(fee_filter, NetworkMessage::FeeFilter(_)));
+        assert!(completed.their_preferences.wtxid());
+        assert!(completed.their_preferences.addrv2());
+        assert!(!completed.their_preferences.announce_by_headers());
+    }
+
+    #[test]
+    fn test_outbound_handshake() {
+        let mock = build_mock_version(ProtocolVersion::WTXID_RELAY_VERSION, ServiceFlags::NONE);
+        let connection_config = ConnectionConfig::new();
+        let nonce = 43;
+        let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        let (_, messages) = connection_config
+            .start_handshake(
+                system_time,
+                NetworkMessage::Version(mock),
+                nonce,
+                Origin::Inbound,
+            )
+            .unwrap();
+        let mut message_iter = messages.into_iter();
+        let nxt = message_iter.next().unwrap();
+        assert!(matches!(nxt, NetworkMessage::Version(_)));
+        let nxt = message_iter.next().unwrap();
+        assert!(matches!(nxt, NetworkMessage::WtxidRelay));
+        let nxt = message_iter.next().unwrap();
+        assert!(matches!(nxt, NetworkMessage::SendAddrV2));
+        let nxt = message_iter.next().unwrap();
+        assert!(matches!(nxt, NetworkMessage::SendHeaders));
+        assert!(message_iter.next().is_none());
+    }
+
+    #[test]
+    fn test_reject_low_version() {
+        let mock = build_mock_version(
+            ProtocolVersion::INVALID_CB_NO_BAN_VERSION,
+            ServiceFlags::NONE,
+        );
+        let connection_config = ConnectionConfig::new();
+        let nonce = 43;
+        let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        assert!(
+            connection_config
+                .start_handshake(
+                    system_time,
+                    NetworkMessage::Version(mock),
+                    nonce,
+                    Origin::Inbound,
+                )
+                .is_err()
+        )
+    }
+
+    #[test]
+    fn test_reject_missing_services() {
+        let mock = build_mock_version(ProtocolVersion::WTXID_RELAY_VERSION, ServiceFlags::NONE);
+        let connection_config =
+            ConnectionConfig::new().set_service_requirement(ServiceFlags::NETWORK);
+        let nonce = 43;
+        let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        assert!(
+            connection_config
+                .start_handshake(
+                    system_time,
+                    NetworkMessage::Version(mock),
+                    nonce,
+                    Origin::Inbound,
+                )
+                .is_err()
+        )
+    }
+
+    #[test]
+    fn test_change_version_ok() {
+        let mock = build_mock_version(ProtocolVersion::SENDHEADERS_VERSION, ServiceFlags::NONE);
+        let connection_config = ConnectionConfig::new()
+            .decrease_version_requirement(ProtocolVersion::SENDHEADERS_VERSION);
+        let nonce = 43;
+        let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        assert!(
+            connection_config
+                .start_handshake(
+                    system_time,
+                    NetworkMessage::Version(mock),
+                    nonce,
+                    Origin::Inbound,
+                )
+                .is_ok()
+        )
     }
 }
