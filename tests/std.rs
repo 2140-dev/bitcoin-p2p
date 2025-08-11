@@ -1,10 +1,10 @@
-use std::net::SocketAddrV4;
+use std::net::{Ipv4Addr, SocketAddrV4};
 
 use bitcoin::Network;
 use corepc_node::{P2P, exe_path};
 
-use bitcoin_p2p::net::ConnectionExt;
 use bitcoin_p2p::handshake::ConnectionConfig;
+use bitcoin_p2p::net::ConnectionExt;
 
 #[derive(Debug, Clone)]
 struct TestNodeBuilder<'a> {
@@ -19,6 +19,11 @@ impl<'a> TestNodeBuilder<'a> {
         conf.args.push("--rest=1");
         conf.args.push("--server=1");
         Self { conf }
+    }
+
+    fn connect(mut self, to: SocketAddrV4) -> Self {
+        self.conf.p2p = P2P::Connect(to, true);
+        self
     }
 
     #[allow(unused)]
@@ -43,4 +48,14 @@ fn does_handshake() {
         .open_connection(socket_addr.into())
         .unwrap();
     bitcoind.stop().unwrap();
+}
+
+#[test]
+fn can_accept_handshake() {
+    let bind = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 8333);
+    let connection = ConnectionConfig::new().change_network(Network::Regtest);
+    let wait = std::thread::spawn(move || connection.listen(bind.into()));
+    let (_, _) = TestNodeBuilder::new().push_arg("--v2transport=0").connect(bind).start();
+    let (_, _, metadata) = wait.join().unwrap().unwrap();
+    assert!(metadata.their_preferences().wtxid());
 }
