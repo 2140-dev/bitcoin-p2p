@@ -1,14 +1,16 @@
 use std::{
-    sync::atomic::{AtomicBool, AtomicU64},
+    sync::atomic::{AtomicBool, AtomicU64, Ordering},
     time::Instant,
 };
 
 use p2p::{ProtocolVersion, ServiceFlags};
 
-/// Tools for validating messages and data
-pub mod validation;
 /// Automated version negotiation with remote peers
 pub mod handshake;
+/// Networking extensions
+pub mod net;
+/// Tools for validating messages and data
+pub mod validation;
 
 #[derive(Debug, Clone, Copy)]
 pub struct FeelerData {
@@ -37,23 +39,35 @@ impl Preferences {
     }
 
     fn prefers_header_announcment(&self) {
-        self.sendheaders
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.sendheaders.store(true, Ordering::Relaxed);
     }
 
     fn prefers_addrv2(&self) {
-        self.sendaddrv2
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.sendaddrv2.store(true, Ordering::Relaxed);
     }
 
     fn prefers_wtxid(&self) {
-        self.sendwtxid
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.sendwtxid.store(true, Ordering::Relaxed);
     }
 
     fn prefers_cmpct(&self, version: u64) {
-        self.sendcmpct
-            .store(version, std::sync::atomic::Ordering::Relaxed);
+        self.sendcmpct.store(version, Ordering::Relaxed);
+    }
+
+    pub fn addrv2(&self) -> bool {
+        self.sendaddrv2.load(Ordering::Relaxed)
+    }
+
+    pub fn announce_by_headers(&self) -> bool {
+        self.sendheaders.load(Ordering::Relaxed)
+    }
+
+    pub fn wtxid(&self) -> bool {
+        self.sendwtxid.load(Ordering::Relaxed)
+    }
+
+    pub fn cmpct_version(&self) -> u64 {
+        self.sendcmpct.load(Ordering::Relaxed)
     }
 }
 
@@ -103,6 +117,21 @@ impl MessageRate {
             }
         }
     }
+
+    pub fn total_count(&self) -> Option<u32> {
+        match self {
+            Self::NoneReceived => None,
+            Self::Ongoing { count, start: _ } => Some(*count as u32),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, std::hash::Hash)]
+pub enum TimedMessage {
+    BlockHeaders,
+    CFilters,
+    Block,
+    Addr,
 }
 
 #[cfg(test)]
@@ -128,5 +157,11 @@ mod tests {
     #[test]
     fn test_preferences() {
         let pref = Preferences::new();
+        pref.prefers_wtxid();
+        pref.prefers_addrv2();
+        pref.prefers_header_announcment();
+        assert!(pref.addrv2());
+        assert!(pref.announce_by_headers());
+        assert!(pref.wtxid());
     }
 }

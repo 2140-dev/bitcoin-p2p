@@ -10,6 +10,11 @@ name = "bp2p"
 bitcoin = { git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "55992efa68a1ec557eb546f5effd171e1a9fb896", features = ["rand-std"] }
 p2p = { package = "bitcoin-p2p-messages",  git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "55992efa68a1ec557eb546f5effd171e1a9fb896" }
 
+[dev-dependencies]
+corepc-node = { version = "0.8.0", default-features = false, features = [
+    "29_0", "download"
+] }
+
 [profile.release]
 opt-level = 3
 lto = true

@@ -58,6 +58,10 @@ impl ConnectionConfig {
         self
     }
 
+    pub fn network(&self) -> Network {
+        self.network
+    }
+
     pub fn decrease_version_requirement(mut self, protocol_version: ProtocolVersion) -> Self {
         self.expected_version = protocol_version;
         self
@@ -93,32 +97,33 @@ impl ConnectionConfig {
         self
     }
 
-    fn build_our_version(&self, unix_time: Duration, nonce: Nonce) -> VersionMessage {
+    pub(crate) fn build_our_version(&self, unix_time: Duration, nonce: u64) -> VersionMessage {
         VersionMessage {
             version: self.our_version,
             services: self.our_services,
             timestamp: unix_time.as_secs() as i64,
             receiver: UNREACHABLE,
             sender: UNREACHABLE,
-            nonce: nonce.0,
+            nonce,
             user_agent: self.user_agent.clone(),
             start_height: self.our_height,
             relay: false,
         }
     }
 
-    fn start_handshake(
+    pub(crate) fn start_handshake(
         self,
         unix_time: Duration,
         network_message: NetworkMessage,
-        nonce: Nonce,
+        nonce: u64,
+        origin: Origin,
     ) -> Result<(InitializedHandshake, Vec<NetworkMessage>), Error> {
         let version = match network_message {
             NetworkMessage::Version(version) => version,
             e => return Err(Error::IrrelevantMessage(e.command())),
         };
         let mut suggested_messages = Vec::new();
-        if version.nonce.eq(&nonce.0) {
+        if version.nonce.eq(&nonce) {
             return Err(Error::ConnectionToSelf);
         }
         if version.version < self.expected_version
@@ -129,8 +134,11 @@ impl ConnectionConfig {
         if !version.services.has(self.expected_services) {
             return Err(Error::MissingService(version.services));
         }
+        if matches!(origin, Origin::Inbound) {
+            let version = NetworkMessage::Version(self.build_our_version(unix_time, nonce));
+            suggested_messages.push(version);
+        }
         let effective_version = std::cmp::min(self.our_version, version.version);
-
         if effective_version > ProtocolVersion::WTXID_RELAY_VERSION {
             suggested_messages.push(NetworkMessage::WtxidRelay);
         }
@@ -167,23 +175,14 @@ impl Default for ConnectionConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, std::hash::Hash)]
-struct Nonce(u64);
-
-impl Nonce {
-    fn new() -> Self {
-        Self(bitcoin::secp256k1::rand::random())
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Origin {
+pub enum Origin {
     Inbound,
     OutBound,
 }
 
 #[derive(Debug, Clone)]
-struct InitializedHandshake {
+pub(crate) struct InitializedHandshake {
     feeler: FeelerData,
     their_preferences: Arc<Preferences>,
     fee_filter: FeeRate,
@@ -191,7 +190,7 @@ struct InitializedHandshake {
 }
 
 impl InitializedHandshake {
-    fn negotiate(
+    pub(crate) fn negotiate(
         &self,
         message: NetworkMessage,
     ) -> Result<Option<(CompletedHandshake, Vec<NetworkMessage>)>, Error> {
@@ -230,9 +229,9 @@ impl InitializedHandshake {
 }
 
 #[derive(Debug, Clone)]
-struct CompletedHandshake {
-    feeler: FeelerData,
-    their_preferences: Arc<Preferences>,
+pub(crate) struct CompletedHandshake {
+    pub(crate) feeler: FeelerData,
+    pub(crate) their_preferences: Arc<Preferences>,
 }
 
 #[derive(Debug, Clone)]
