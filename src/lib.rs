@@ -1,7 +1,55 @@
-use std::time::Instant;
+use std::{
+    sync::atomic::{AtomicBool, AtomicU64},
+    time::Instant,
+};
 
 /// Tools for validating messages and data
 pub mod validation;
+
+#[derive(Debug)]
+pub struct Preferences {
+    sendheaders: AtomicBool,
+    sendaddrv2: AtomicBool,
+    sendcmpct: AtomicU64,
+    sendwtxid: AtomicBool,
+}
+
+impl Preferences {
+    fn new() -> Self {
+        Self {
+            sendheaders: AtomicBool::new(false),
+            sendaddrv2: AtomicBool::new(false),
+            sendcmpct: AtomicU64::new(0),
+            sendwtxid: AtomicBool::new(false),
+        }
+    }
+
+    fn prefers_header_announcment(&self) {
+        self.sendheaders
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn prefers_addrv2(&self) {
+        self.sendaddrv2
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn prefers_wtxid(&self) {
+        self.sendwtxid
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn prefers_cmpct(&self, version: u64) {
+        self.sendcmpct
+            .store(version, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl Default for Preferences {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum MessageRate {
@@ -49,7 +97,7 @@ impl MessageRate {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use crate::MessageRate;
+    use crate::{MessageRate, Preferences};
 
     #[test]
     fn test_message_rate() {
@@ -63,5 +111,10 @@ mod tests {
         assert_eq!(rate.messages_per_secs(later).unwrap(), 1.);
         rate.add_messages(10, later);
         assert_eq!(rate.messages_per_secs(later).unwrap(), 2.);
+    }
+
+    #[test]
+    fn test_preferences() {
+        let pref = Preferences::new();
     }
 }
