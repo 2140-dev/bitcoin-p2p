@@ -1,4 +1,3 @@
-use bitcoin::block::HeaderExt;
 use p2p::message::NetworkMessage;
 
 const MAX_INV_SIZE: usize = 50_000;
@@ -52,20 +51,7 @@ impl ValidationExt for NetworkMessage {
     }
 
     fn is_malformed(&self) -> bool {
-        match self {
-            NetworkMessage::Headers(headers) => {
-                !(headers
-                    .iter()
-                    .zip(headers.iter().skip(1))
-                    .all(|(first, second)| first.block_hash().eq(&second.prev_blockhash))
-                    && !headers.iter().any(|header| {
-                        let target = header.target();
-                        let valid_pow = header.validate_pow(target);
-                        valid_pow.is_err()
-                    }))
-            }
-            _ => false,
-        }
+        false
     }
 }
 
@@ -73,7 +59,7 @@ impl ValidationExt for NetworkMessage {
 mod tests {
     use bitcoin::BlockHash;
     use p2p::{
-        ProtocolVersion, message::NetworkMessage, message_blockdata::Inventory,
+        ProtocolVersion, message::NetworkMessage,
         message_network::Alert,
     };
 
