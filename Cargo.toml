@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-name = "bp2p"
+name = "bitcoin_p2p"
 
 [dependencies]
 bitcoin = { git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "55992efa68a1ec557eb546f5effd171e1a9fb896", features = ["rand-std"] }

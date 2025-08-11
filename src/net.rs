@@ -295,7 +295,7 @@ impl ReadTransport {
     fn read_message<R: Read>(&mut self, reader: &mut R) -> Result<Option<NetworkMessage>, Error> {
         match self {
             ReadTransport::V1(magic) => {
-                let mut message_buf = [0; 24];
+                let mut message_buf = vec![0; 24];
                 reader.read_exact(&mut message_buf)?;
                 let message_header = consensus::deserialize::<V1MessageHeader>(&message_buf)?;
                 if message_header.magic != *magic {
@@ -304,7 +304,7 @@ impl ReadTransport {
                 // Will panic on machines with under 32 bit precision
                 let mut contents_buf = vec![0; message_header.length as usize];
                 reader.read_exact(&mut contents_buf)?;
-                message_buf.to_vec().extend_from_slice(&contents_buf);
+                message_buf.extend_from_slice(&contents_buf);
                 let message = consensus::deserialize::<RawNetworkMessage>(&message_buf)?;
                 Ok(Some(message.into_payload()))
             }
