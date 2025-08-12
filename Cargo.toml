@@ -15,6 +15,9 @@ corepc-node = { version = "0.8.0", default-features = false, features = [
     "29_0", "download"
 ] }
 
+[[example]]
+name = "handshake"
+
 [profile.release]
 opt-level = 3
 lto = true
