@@ -37,4 +37,11 @@ jobs:
       - uses: extractions/setup-just@v3
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - run: just test
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v3
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: just test integration
  

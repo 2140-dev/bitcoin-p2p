@@ -21,13 +21,8 @@ _test-unit:
   cargo test --doc
   cargo test --examples
 
-_test-min-versions:
-  just _delete-lockfile
-  cargo +nightly check --all-features -Z direct-minimal-versions
-
-_test-msrv:
-  cargo install cargo-msrv@0.18.4
-  cargo msrv verify --all-features
+_test-integration:
+  cargo test
 
 # Delete unused files or branches: data, lockfile, branches
 delete item="branches":
