@@ -116,7 +116,6 @@ impl ConnectionConfig {
         unix_time: Duration,
         network_message: NetworkMessage,
         nonce: u64,
-        origin: Origin,
     ) -> Result<(InitializedHandshake, Vec<NetworkMessage>), Error> {
         let version = match network_message {
             NetworkMessage::Version(version) => version,
@@ -133,10 +132,6 @@ impl ConnectionConfig {
         }
         if !version.services.has(self.expected_services) {
             return Err(Error::MissingService(version.services));
-        }
-        if matches!(origin, Origin::Inbound) {
-            let version = NetworkMessage::Version(self.build_our_version(unix_time, nonce));
-            suggested_messages.push(version);
         }
         let effective_version = std::cmp::min(self.our_version, version.version);
         if effective_version >= ProtocolVersion::WTXID_RELAY_VERSION {
@@ -173,12 +168,6 @@ impl Default for ConnectionConfig {
     fn default() -> Self {
         Self::new()
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Origin {
-    Inbound,
-    OutBound,
 }
 
 #[derive(Debug, Clone)]
@@ -264,7 +253,7 @@ mod tests {
         message_network::{UserAgent, VersionMessage},
     };
 
-    use super::{ConnectionConfig, Origin};
+    use super::ConnectionConfig;
 
     fn build_mock_version(
         with_version: ProtocolVersion,
@@ -290,12 +279,7 @@ mod tests {
         let nonce = 43;
         let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         let (init_handshake, messages) = connection_config
-            .start_handshake(
-                system_time,
-                NetworkMessage::Version(mock),
-                nonce,
-                Origin::OutBound,
-            )
+            .start_handshake(system_time, NetworkMessage::Version(mock), nonce)
             .unwrap();
         let mut message_iter = messages.into_iter();
         let nxt = message_iter.next().unwrap();
@@ -326,32 +310,6 @@ mod tests {
     }
 
     #[test]
-    fn test_inbound_handshake() {
-        let mock = build_mock_version(ProtocolVersion::WTXID_RELAY_VERSION, ServiceFlags::NONE);
-        let connection_config = ConnectionConfig::new();
-        let nonce = 43;
-        let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        let (_, messages) = connection_config
-            .start_handshake(
-                system_time,
-                NetworkMessage::Version(mock),
-                nonce,
-                Origin::Inbound,
-            )
-            .unwrap();
-        let mut message_iter = messages.into_iter();
-        let nxt = message_iter.next().unwrap();
-        assert!(matches!(nxt, NetworkMessage::Version(_)));
-        let nxt = message_iter.next().unwrap();
-        assert!(matches!(nxt, NetworkMessage::WtxidRelay));
-        let nxt = message_iter.next().unwrap();
-        assert!(matches!(nxt, NetworkMessage::SendAddrV2));
-        let nxt = message_iter.next().unwrap();
-        assert!(matches!(nxt, NetworkMessage::SendHeaders));
-        assert!(message_iter.next().is_none());
-    }
-
-    #[test]
     fn test_reject_low_version() {
         let mock = build_mock_version(
             ProtocolVersion::INVALID_CB_NO_BAN_VERSION,
@@ -362,12 +320,7 @@ mod tests {
         let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         assert!(
             connection_config
-                .start_handshake(
-                    system_time,
-                    NetworkMessage::Version(mock),
-                    nonce,
-                    Origin::Inbound,
-                )
+                .start_handshake(system_time, NetworkMessage::Version(mock), nonce,)
                 .is_err()
         )
     }
@@ -381,12 +334,7 @@ mod tests {
         let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         assert!(
             connection_config
-                .start_handshake(
-                    system_time,
-                    NetworkMessage::Version(mock),
-                    nonce,
-                    Origin::Inbound,
-                )
+                .start_handshake(system_time, NetworkMessage::Version(mock), nonce,)
                 .is_err()
         )
     }
@@ -400,12 +348,7 @@ mod tests {
         let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         assert!(
             connection_config
-                .start_handshake(
-                    system_time,
-                    NetworkMessage::Version(mock),
-                    nonce,
-                    Origin::Inbound,
-                )
+                .start_handshake(system_time, NetworkMessage::Version(mock), nonce,)
                 .is_ok()
         )
     }

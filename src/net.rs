@@ -22,14 +22,13 @@ use p2p::{
 
 use crate::{
     FeelerData, MessageRate, Preferences, TimedMessage,
-    handshake::{self, CompletedHandshake, ConnectionConfig, Origin},
+    handshake::{self, CompletedHandshake, ConnectionConfig},
 };
 
 pub trait ConnectionExt: Send + Sync {
     fn handshake(
         self,
         tcp_stream: TcpStream,
-        origin: Origin,
     ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError>;
 
     fn listen(
@@ -49,7 +48,7 @@ impl ConnectionExt for ConnectionConfig {
         to: SocketAddr,
     ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError> {
         let tcp_stream = TcpStream::connect(to)?;
-        Self::handshake(self, tcp_stream, Origin::OutBound)
+        Self::handshake(self, tcp_stream)
     }
 
     fn listen(
@@ -58,13 +57,12 @@ impl ConnectionExt for ConnectionConfig {
     ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError> {
         let listener = TcpListener::bind(bind)?;
         let (tcp_stream, _) = listener.accept()?;
-        Self::handshake(self, tcp_stream, Origin::Inbound)
+        Self::handshake(self, tcp_stream)
     }
 
     fn handshake(
         self,
         mut tcp_stream: TcpStream,
-        origin: Origin,
     ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError> {
         let system_time = SystemTime::now();
         let unix_time = system_time
@@ -76,7 +74,7 @@ impl ConnectionExt for ConnectionConfig {
         let mut read_half = ReadTransport::V1(self.network().default_network_magic());
         write_half.write_message(NetworkMessage::Version(version), &mut tcp_stream)?;
         let (handshake, messages) = match read_half.read_message(&mut tcp_stream)? {
-            Some(message) => self.start_handshake(unix_time, message, nonce, origin)?,
+            Some(message) => self.start_handshake(unix_time, message, nonce)?,
             None => return Err(ConnectionError::Other(Error::MissingVersion)),
         };
         for message in messages {

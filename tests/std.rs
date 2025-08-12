@@ -66,7 +66,7 @@ fn can_accept_handshake() {
 
 #[test]
 fn maintain_connection() {
-    let (mut bitcoind, socket_addr) = TestNodeBuilder::new().start();
+    let (mut bitcoind, socket_addr) = TestNodeBuilder::new().push_arg("--v2transport=0").start();
     let (writer, mut reader, _) = ConnectionConfig::new()
         .change_network(Network::Regtest)
         .open_connection(socket_addr.into())
