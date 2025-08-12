@@ -24,17 +24,22 @@ use crate::{
     handshake::{self, CompletedHandshake, ConnectionConfig},
 };
 
+/// Open or begin a connection to an inbound or outbound peer.
 pub trait ConnectionExt: Send + Sync {
+    /// Facilitate a version handshake on a potentially open connection. One use for this method is
+    /// to begin a handshake over an existing Socks5 proxy.
     fn handshake(
         self,
         tcp_stream: TcpStream,
     ) -> Result<(ConnectionWriter, ConnectionReader, ConnectionMetrics), Error>;
 
+    /// Listen for inbound connections on the specified socket address.
     fn listen(
         self,
         bind: impl Into<SocketAddr>,
     ) -> Result<(ConnectionWriter, ConnectionReader, ConnectionMetrics), Error>;
 
+    /// Open an outbound connection to the specified socket address.
     fn open_connection(
         self,
         to: impl Into<SocketAddr>,
@@ -124,6 +129,7 @@ impl ConnectionExt for ConnectionConfig {
     }
 }
 
+/// Send messages to an open connection.
 #[derive(Debug)]
 pub struct ConnectionWriter {
     sender: mpsc::Sender<NetworkMessage>,
@@ -131,6 +137,8 @@ pub struct ConnectionWriter {
 }
 
 impl ConnectionWriter {
+    /// Send a network message to this peer. Errors indicate that the connection is terminated and
+    /// no further messages will succeed.
     #[allow(clippy::result_large_err)]
     pub fn send_message(
         &self,
@@ -139,6 +147,8 @@ impl ConnectionWriter {
         self.sender.send(network_message)
     }
 
+    /// In the event of a failed message, investigate IO related failures if the connection was not
+    /// closed gracefully.
     pub fn take_errors(self) -> Option<io::Error> {
         self.task_handle.join().ok()?.err()
     }
@@ -170,6 +180,7 @@ impl OpenWriter {
     }
 }
 
+/// Read messages from an open connection.
 #[derive(Debug)]
 pub struct ConnectionReader {
     tcp_stream: TcpStream,
@@ -179,6 +190,7 @@ pub struct ConnectionReader {
 }
 
 impl ConnectionReader {
+    /// Wait for a message while blocking the current thread of execution.
     pub fn read_message(&mut self) -> Result<Option<NetworkMessage>, Error> {
         let message = self.transport.read_message(&mut self.tcp_stream)?;
         if let Some(message) = &message {
@@ -220,7 +232,7 @@ impl ConnectionReader {
 }
 
 #[derive(Debug)]
-pub enum WriteTransport {
+enum WriteTransport {
     V1(Magic),
 }
 
@@ -243,7 +255,7 @@ impl WriteTransport {
 }
 
 #[derive(Debug)]
-pub enum ReadTransport {
+enum ReadTransport {
     V1(Magic),
 }
 
@@ -268,12 +280,18 @@ impl ReadTransport {
     }
 }
 
+/// Errors that occur during a connection.
 #[derive(Debug)]
 pub enum Error {
+    /// A message was not deserialized according to protocol specifications.
     Deserialize(DeserializeError),
+    /// An IO related error occured.
     Io(io::Error),
+    /// An error occured during the version handshake.
     Handshake(handshake::Error),
+    /// The peer sent magic that does not belong to the current network.
     UnexpectedMagic(Magic),
+    /// The peer did not send a version message.
     MissingVersion,
 }
 

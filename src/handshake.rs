@@ -21,6 +21,7 @@ const CLIENT_NAME: &str = "SwiftSync";
 const SERVICES: ServiceFlags = ServiceFlags::NONE;
 const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion::WTXID_RELAY_VERSION;
 
+/// Build a connection according to a list of preferences
 #[derive(Debug, Clone)]
 pub struct ConnectionConfig {
     our_version: ProtocolVersion,
@@ -36,6 +37,7 @@ pub struct ConnectionConfig {
 }
 
 impl ConnectionConfig {
+    /// Start a new connection on the bitcoin network
     pub fn new() -> Self {
         let user_agent = UserAgent::new(CLIENT_NAME, AGENT_VERSION);
         Self {
@@ -55,50 +57,60 @@ impl ConnectionConfig {
         }
     }
 
+    /// Change the network
     pub fn change_network(mut self, network: Network) -> Self {
         self.network = network;
         self
     }
 
+    /// Fetch the current network
     pub fn network(&self) -> Network {
         self.network
     }
 
+    /// Request the peer gossip new addresses at the beginning of the conneciton
     pub fn request_addr(mut self) -> Self {
         self.request_addr = true;
         self
     }
 
+    /// Decrease the minimum accepted version
     pub fn decrease_version_requirement(mut self, protocol_version: ProtocolVersion) -> Self {
         self.expected_version = protocol_version;
         self
     }
 
+    /// Set the requirement of what services the peer needs
     pub fn set_service_requirement(mut self, service_flags: ServiceFlags) -> Self {
         self.expected_services = service_flags;
         self
     }
 
+    /// Offer services to the peer
     pub fn offer_services(mut self, service_flags: ServiceFlags) -> Self {
         self.our_services = service_flags;
         self
     }
 
+    /// Set a custom user agent describing this software
     pub fn user_agent(mut self, user_agent: UserAgent) -> Self {
         self.user_agent = user_agent;
         self
     }
 
+    /// Advertise a compact block version
     pub fn send_cmpct(mut self, send_cmpct: SendCmpct) -> Self {
         self.send_cmpct = send_cmpct;
         self
     }
 
+    /// Report a block chain height other than zero
     pub fn our_height(mut self, height: i32) -> Self {
         self.our_height = height;
         self
     }
 
+    /// Advertise the minimum fee rate required to gossip transactions
     pub fn fee_filter(mut self, fee_filter: FeeRate) -> Self {
         self.fee_filter = fee_filter;
         self
@@ -236,11 +248,16 @@ pub(crate) struct CompletedHandshake {
     pub(crate) their_preferences: Arc<Preferences>,
 }
 
+/// Errors that occur during a handshake
 #[derive(Debug, Clone)]
 pub enum Error {
+    /// The peer send some irrelevant message
     IrrelevantMessage(CommandString),
+    /// A circular connection was made
     ConnectionToSelf,
+    /// The version the peer advertises is too low
     TooLowVersion(ProtocolVersion),
+    /// The peer is missing a required service
     MissingService(ServiceFlags),
 }
 

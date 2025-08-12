@@ -16,14 +16,22 @@ pub mod net;
 /// Tools for validating messages and data
 pub mod validation;
 
+/// The static data related to a connection. Note that this is referred to as "feeler" data because
+/// it may be used to collect data on very short-lived connections.
 #[derive(Debug, Clone, Copy)]
 pub struct FeelerData {
+    /// The lowest common version of the connection.
     pub effective_version: ProtocolVersion,
+    /// The service flags they advertise.
     pub services: ServiceFlags,
+    /// The net time difference between our time and what they report.
     pub net_time_difference: i64,
+    /// The reported height of their block chain.
     pub reported_height: i32,
 }
 
+/// The peer's preferences during this connection. These are updated automatically as the peer
+/// shares information.
 #[derive(Debug)]
 pub struct Preferences {
     sendheaders: AtomicBool,
@@ -58,18 +66,22 @@ impl Preferences {
         self.sendcmpct.store(version, Ordering::Relaxed);
     }
 
+    /// The peer prefers `addrv2` messages
     pub fn addrv2(&self) -> bool {
         self.sendaddrv2.load(Ordering::Relaxed)
     }
 
+    /// The peer prefers headers are announced by a `headers` message instead of `inv`
     pub fn announce_by_headers(&self) -> bool {
         self.sendheaders.load(Ordering::Relaxed)
     }
 
+    /// The peer prefers witness transaction IDs
     pub fn wtxid(&self) -> bool {
         self.sendwtxid.load(Ordering::Relaxed)
     }
 
+    /// The reported compact block relay version
     pub fn cmpct_version(&self) -> u64 {
         self.sendcmpct.load(Ordering::Relaxed)
     }
@@ -81,6 +93,7 @@ impl Default for Preferences {
     }
 }
 
+/// Data collected during a connection that is continually updated in the background
 #[derive(Debug, Clone)]
 pub struct ConnectionMetrics {
     feeler: FeelerData,
@@ -89,20 +102,24 @@ pub struct ConnectionMetrics {
 }
 
 impl ConnectionMetrics {
+    /// Static data about the peer
     pub fn feeler_data(&self) -> &FeelerData {
         &self.feeler
     }
 
+    /// Their current preferences for message exchange
     pub fn their_preferences(&self) -> &Preferences {
         self.their_preferences.as_ref()
     }
 
+    /// The message rate for a time-sensitive message
     pub fn message_rate(&self, timed_message: TimedMessage) -> Option<MessageRate> {
         let lock = self.timed_messages.lock().ok()?;
         Some(*lock.message_rate(timed_message))
     }
 }
 
+/// The rate at which a peer sends a particular message
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum MessageRate {
     NoneReceived,
@@ -135,6 +152,7 @@ impl MessageRate {
         }
     }
 
+    /// The messages per second, recorded at the current time
     pub fn messages_per_secs(&self, now: Instant) -> Option<f64> {
         match self {
             Self::NoneReceived => None,
@@ -144,6 +162,7 @@ impl MessageRate {
         }
     }
 
+    /// The total number of these messages sent
     pub fn total_count(&self) -> u32 {
         match self {
             Self::NoneReceived => 0,
@@ -152,11 +171,16 @@ impl MessageRate {
     }
 }
 
+/// A time-sensitive message
 #[derive(Debug, Clone, Copy, PartialEq, Eq, std::hash::Hash)]
 pub enum TimedMessage {
+    /// Block headers
     BlockHeaders,
+    /// Compact block filters
     CFilters,
+    /// Bitcoin blocks
     Block,
+    /// Potential peers on the network
     Addr,
 }
 
