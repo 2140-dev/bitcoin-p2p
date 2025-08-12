@@ -196,9 +196,10 @@ impl InitializedHandshake {
     ) -> Result<Option<(CompletedHandshake, Vec<NetworkMessage>)>, Error> {
         match message {
             NetworkMessage::Verack => {
+                let verack = NetworkMessage::Verack;
                 let fee_filter = NetworkMessage::FeeFilter(self.fee_filter);
                 let send_cmpct = NetworkMessage::SendCmpct(self.send_cmpct);
-                let messages = vec![send_cmpct, fee_filter];
+                let messages = vec![verack, send_cmpct, fee_filter];
                 Ok(Some((
                     CompletedHandshake {
                         feeler: self.feeler,
@@ -313,8 +314,10 @@ mod tests {
         let message = NetworkMessage::Verack;
         let (completed, messages) = init_handshake.negotiate(message).unwrap().unwrap();
         let mut message_iter = messages.into_iter();
-        let fee_filter = message_iter.next().unwrap();
-        assert!(matches!(fee_filter, NetworkMessage::SendCmpct(_)));
+        let verack = message_iter.next().unwrap();
+        assert!(matches!(verack, NetworkMessage::Verack));
+        let cmpct = message_iter.next().unwrap();
+        assert!(matches!(cmpct, NetworkMessage::SendCmpct(_)));
         let fee_filter = message_iter.next().unwrap();
         assert!(matches!(fee_filter, NetworkMessage::FeeFilter(_)));
         assert!(completed.their_preferences.wtxid());

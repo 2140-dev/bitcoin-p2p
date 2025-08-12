@@ -5,6 +5,7 @@ use corepc_node::{P2P, exe_path};
 
 use bitcoin_p2p::handshake::ConnectionConfig;
 use bitcoin_p2p::net::ConnectionExt;
+use p2p::message::NetworkMessage;
 
 #[derive(Debug, Clone)]
 struct TestNodeBuilder<'a> {
@@ -55,7 +56,22 @@ fn can_accept_handshake() {
     let bind = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 8333);
     let connection = ConnectionConfig::new().change_network(Network::Regtest);
     let wait = std::thread::spawn(move || connection.listen(bind.into()));
-    let (_, _) = TestNodeBuilder::new().push_arg("--v2transport=0").connect(bind).start();
+    let (_, _) = TestNodeBuilder::new()
+        .push_arg("--v2transport=0")
+        .connect(bind)
+        .start();
     let (_, _, metadata) = wait.join().unwrap().unwrap();
     assert!(metadata.their_preferences().wtxid());
+}
+
+#[test]
+fn maintain_connection() {
+    let (mut bitcoind, socket_addr) = TestNodeBuilder::new().start();
+    let (writer, mut reader, _) = ConnectionConfig::new()
+        .change_network(Network::Regtest)
+        .open_connection(socket_addr.into())
+        .unwrap();
+    writer.send_message(NetworkMessage::Ping(42)).unwrap();
+    reader.read_message().unwrap();
+    bitcoind.stop().unwrap();
 }
