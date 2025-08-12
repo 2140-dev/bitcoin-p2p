@@ -20,7 +20,7 @@ use p2p::{
 };
 
 use crate::{
-    FeelerData, MessageRate, Preferences, TimedMessage, TimedMessages,
+    ConnectionMetrics, Preferences, TimedMessage, TimedMessages,
     handshake::{self, CompletedHandshake, ConnectionConfig},
 };
 
@@ -121,28 +121,6 @@ impl ConnectionExt for ConnectionConfig {
                 }
             }
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ConnectionMetrics {
-    feeler: FeelerData,
-    their_preferences: Arc<Preferences>,
-    timed_messages: Arc<Mutex<TimedMessages>>,
-}
-
-impl ConnectionMetrics {
-    pub fn feeler_data(&self) -> &FeelerData {
-        &self.feeler
-    }
-
-    pub fn their_preferences(&self) -> &Preferences {
-        self.their_preferences.as_ref()
-    }
-
-    pub fn message_rate(&self, timed_message: TimedMessage) -> Option<MessageRate> {
-        let lock = self.timed_messages.lock().ok()?;
-        Some(*lock.message_rate(timed_message))
     }
 }
 
