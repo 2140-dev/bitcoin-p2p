@@ -28,24 +28,24 @@ pub trait ConnectionExt: Send + Sync {
     fn handshake(
         self,
         tcp_stream: TcpStream,
-    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), Error>;
+    ) -> Result<(ConnectionWriter, ConnectionReader, ConnectionMetrics), Error>;
 
     fn listen(
         self,
         bind: impl Into<SocketAddr>,
-    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), Error>;
+    ) -> Result<(ConnectionWriter, ConnectionReader, ConnectionMetrics), Error>;
 
     fn open_connection(
         self,
         to: impl Into<SocketAddr>,
-    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), Error>;
+    ) -> Result<(ConnectionWriter, ConnectionReader, ConnectionMetrics), Error>;
 }
 
 impl ConnectionExt for ConnectionConfig {
     fn open_connection(
         self,
         to: impl Into<SocketAddr>,
-    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), Error> {
+    ) -> Result<(ConnectionWriter, ConnectionReader, ConnectionMetrics), Error> {
         let tcp_stream = TcpStream::connect(to.into())?;
         Self::handshake(self, tcp_stream)
     }
@@ -53,7 +53,7 @@ impl ConnectionExt for ConnectionConfig {
     fn listen(
         self,
         bind: impl Into<SocketAddr>,
-    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), Error> {
+    ) -> Result<(ConnectionWriter, ConnectionReader, ConnectionMetrics), Error> {
         let listener = TcpListener::bind(bind.into())?;
         let (tcp_stream, _) = listener.accept()?;
         Self::handshake(self, tcp_stream)
@@ -62,7 +62,7 @@ impl ConnectionExt for ConnectionConfig {
     fn handshake(
         self,
         mut tcp_stream: TcpStream,
-    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), Error> {
+    ) -> Result<(ConnectionWriter, ConnectionReader, ConnectionMetrics), Error> {
         let system_time = SystemTime::now();
         let unix_time = system_time
             .duration_since(UNIX_EPOCH)
@@ -91,7 +91,7 @@ impl ConnectionExt for ConnectionConfig {
                             feeler,
                             their_preferences,
                         } = completed_handshake;
-                        let live_connection = LiveConnection {
+                        let live_connection = ConnectionMetrics {
                             feeler,
                             their_preferences: Arc::clone(&their_preferences),
                             timed_messages: Arc::clone(&timed_messages),
@@ -125,13 +125,13 @@ impl ConnectionExt for ConnectionConfig {
 }
 
 #[derive(Debug, Clone)]
-pub struct LiveConnection {
+pub struct ConnectionMetrics {
     feeler: FeelerData,
     their_preferences: Arc<Preferences>,
     timed_messages: Arc<Mutex<TimedMessages>>,
 }
 
-impl LiveConnection {
+impl ConnectionMetrics {
     pub fn feeler_data(&self) -> &FeelerData {
         &self.feeler
     }
