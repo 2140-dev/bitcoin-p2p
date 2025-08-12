@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     fmt::Display,
     io::{self, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
@@ -21,7 +20,7 @@ use p2p::{
 };
 
 use crate::{
-    FeelerData, MessageRate, Preferences, TimedMessage,
+    FeelerData, MessageRate, Preferences, TimedMessage, TimedMessages,
     handshake::{self, CompletedHandshake, ConnectionConfig},
 };
 
@@ -87,16 +86,7 @@ impl ConnectionExt for ConnectionConfig {
                         for response in responses {
                             write_half.write_message(response, &mut tcp_stream)?;
                         }
-                        let mut message_rates = HashMap::new();
-                        for key in [
-                            TimedMessage::Addr,
-                            TimedMessage::BlockHeaders,
-                            TimedMessage::Block,
-                            TimedMessage::CFilters,
-                        ] {
-                            message_rates.insert(key, MessageRate::new());
-                        }
-                        let timed_message = Arc::new(Mutex::new(HashMap::new()));
+                        let timed_messages = Arc::new(Mutex::new(TimedMessages::new()));
                         let CompletedHandshake {
                             feeler,
                             their_preferences,
@@ -104,7 +94,7 @@ impl ConnectionExt for ConnectionConfig {
                         let live_connection = LiveConnection {
                             feeler,
                             their_preferences: Arc::clone(&their_preferences),
-                            timed_message: Arc::clone(&timed_message),
+                            timed_messages: Arc::clone(&timed_messages),
                         };
                         let (tx, rx) = mpsc::channel();
                         let tcp_stream_clone = tcp_stream.try_clone()?;
@@ -123,7 +113,7 @@ impl ConnectionExt for ConnectionConfig {
                             tcp_stream,
                             transport: read_half,
                             their_preferences,
-                            timed_message,
+                            timed_messages,
                         };
                         return Ok((writer, reader, live_connection));
                     }
@@ -138,7 +128,7 @@ impl ConnectionExt for ConnectionConfig {
 pub struct LiveConnection {
     feeler: FeelerData,
     their_preferences: Arc<Preferences>,
-    timed_message: Arc<Mutex<HashMap<TimedMessage, MessageRate>>>,
+    timed_messages: Arc<Mutex<TimedMessages>>,
 }
 
 impl LiveConnection {
@@ -151,8 +141,8 @@ impl LiveConnection {
     }
 
     pub fn message_rate(&self, timed_message: TimedMessage) -> Option<MessageRate> {
-        let lock = self.timed_message.lock().ok()?;
-        lock.get(&timed_message).copied()
+        let lock = self.timed_messages.lock().ok()?;
+        Some(*lock.message_rate(timed_message))
     }
 }
 
@@ -207,7 +197,7 @@ pub struct ConnectionReader {
     tcp_stream: TcpStream,
     transport: ReadTransport,
     their_preferences: Arc<Preferences>,
-    timed_message: Arc<Mutex<HashMap<TimedMessage, MessageRate>>>,
+    timed_messages: Arc<Mutex<TimedMessages>>,
 }
 
 impl ConnectionReader {
@@ -220,38 +210,28 @@ impl ConnectionReader {
                     self.their_preferences.prefers_cmpct(cmpct.version)
                 }
                 NetworkMessage::Block(_) => {
-                    if let Ok(mut lock) = self.timed_message.lock()
-                        && let Some(entry) = lock.get_mut(&TimedMessage::Block)
-                    {
-                        entry.add_single_message(Instant::now());
+                    if let Ok(mut lock) = self.timed_messages.lock() {
+                        lock.add_single(TimedMessage::Block, Instant::now());
                     }
                 }
                 NetworkMessage::Headers(_) => {
-                    if let Ok(mut lock) = self.timed_message.lock()
-                        && let Some(entry) = lock.get_mut(&TimedMessage::BlockHeaders)
-                    {
-                        entry.add_single_message(Instant::now());
+                    if let Ok(mut lock) = self.timed_messages.lock() {
+                        lock.add_single(TimedMessage::BlockHeaders, Instant::now());
                     }
                 }
                 NetworkMessage::CFilter(_) => {
-                    if let Ok(mut lock) = self.timed_message.lock()
-                        && let Some(entry) = lock.get_mut(&TimedMessage::CFilters)
-                    {
-                        entry.add_single_message(Instant::now());
+                    if let Ok(mut lock) = self.timed_messages.lock() {
+                        lock.add_single(TimedMessage::CFilters, Instant::now());
                     }
                 }
                 NetworkMessage::Addr(list) => {
-                    if let Ok(mut lock) = self.timed_message.lock()
-                        && let Some(entry) = lock.get_mut(&TimedMessage::Addr)
-                    {
-                        entry.add_messages(list.0.len(), Instant::now());
+                    if let Ok(mut lock) = self.timed_messages.lock() {
+                        lock.add_many(TimedMessage::Addr, list.0.len(), Instant::now());
                     }
                 }
                 NetworkMessage::AddrV2(list) => {
-                    if let Ok(mut lock) = self.timed_message.lock()
-                        && let Some(entry) = lock.get_mut(&TimedMessage::Addr)
-                    {
-                        entry.add_messages(list.0.len(), Instant::now());
+                    if let Ok(mut lock) = self.timed_messages.lock() {
+                        lock.add_many(TimedMessage::Addr, list.0.len(), Instant::now());
                     }
                 }
                 _ => (),

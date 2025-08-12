@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     sync::atomic::{AtomicBool, AtomicU64, Ordering},
     time::Instant,
 };
@@ -118,10 +119,10 @@ impl MessageRate {
         }
     }
 
-    pub fn total_count(&self) -> Option<u32> {
+    pub fn total_count(&self) -> u32 {
         match self {
-            Self::NoneReceived => None,
-            Self::Ongoing { count, start: _ } => Some(*count as u32),
+            Self::NoneReceived => 0,
+            Self::Ongoing { count, start: _ } => *count as u32,
         }
     }
 }
@@ -134,11 +135,57 @@ pub enum TimedMessage {
     Addr,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct TimedMessages(HashMap<TimedMessage, MessageRate>);
+
+impl TimedMessages {
+    pub(crate) fn new() -> Self {
+        let mut map = HashMap::with_capacity(4);
+        for key in [
+            TimedMessage::BlockHeaders,
+            TimedMessage::CFilters,
+            TimedMessage::Block,
+            TimedMessage::Addr,
+        ] {
+            map.insert(key, MessageRate::new());
+        }
+        Self(map)
+    }
+
+    pub(crate) fn add_single(&mut self, message: TimedMessage, now: Instant) {
+        let val = self
+            .0
+            .get_mut(&message)
+            .expect("all timed messages are in the map");
+        val.add_single_message(now);
+    }
+
+    pub(crate) fn add_many(&mut self, message: TimedMessage, num_messages: usize, now: Instant) {
+        let val = self
+            .0
+            .get_mut(&message)
+            .expect("all timed messages are in the map");
+        val.add_messages(num_messages, now);
+    }
+
+    pub(crate) fn message_rate(&self, message: TimedMessage) -> &MessageRate {
+        self.0
+            .get(&message)
+            .expect("all timed messages are in the map")
+    }
+}
+
+impl Default for TimedMessages {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::{Duration, Instant};
 
-    use crate::{MessageRate, Preferences};
+    use crate::{MessageRate, Preferences, TimedMessage, TimedMessages};
 
     #[test]
     fn test_message_rate() {
@@ -163,5 +210,24 @@ mod tests {
         assert!(pref.addrv2());
         assert!(pref.announce_by_headers());
         assert!(pref.wtxid());
+    }
+
+    #[test]
+    fn test_timed_messages() {
+        let now = Instant::now();
+        let later = now.checked_add(Duration::from_secs(10)).unwrap();
+        let mut timed_messages = TimedMessages::new();
+        timed_messages.add_many(TimedMessage::Addr, 1_000, now);
+        let msg_per_secs = timed_messages
+            .message_rate(TimedMessage::Addr)
+            .messages_per_secs(later)
+            .unwrap();
+        assert_eq!(100., msg_per_secs);
+        assert!(
+            timed_messages
+                .message_rate(TimedMessage::Addr)
+                .total_count()
+                == 1_000
+        );
     }
 }
