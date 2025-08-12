@@ -29,24 +29,24 @@ pub trait ConnectionExt: Send + Sync {
     fn handshake(
         self,
         tcp_stream: TcpStream,
-    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError>;
+    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), Error>;
 
     fn listen(
         self,
         bind: impl Into<SocketAddr>,
-    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError>;
+    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), Error>;
 
     fn open_connection(
         self,
         to: impl Into<SocketAddr>,
-    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError>;
+    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), Error>;
 }
 
 impl ConnectionExt for ConnectionConfig {
     fn open_connection(
         self,
         to: impl Into<SocketAddr>,
-    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError> {
+    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), Error> {
         let tcp_stream = TcpStream::connect(to.into())?;
         Self::handshake(self, tcp_stream)
     }
@@ -54,7 +54,7 @@ impl ConnectionExt for ConnectionConfig {
     fn listen(
         self,
         bind: impl Into<SocketAddr>,
-    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError> {
+    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), Error> {
         let listener = TcpListener::bind(bind.into())?;
         let (tcp_stream, _) = listener.accept()?;
         Self::handshake(self, tcp_stream)
@@ -63,7 +63,7 @@ impl ConnectionExt for ConnectionConfig {
     fn handshake(
         self,
         mut tcp_stream: TcpStream,
-    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError> {
+    ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), Error> {
         let system_time = SystemTime::now();
         let unix_time = system_time
             .duration_since(UNIX_EPOCH)
@@ -75,7 +75,7 @@ impl ConnectionExt for ConnectionConfig {
         write_half.write_message(NetworkMessage::Version(version), &mut tcp_stream)?;
         let (handshake, messages) = match read_half.read_message(&mut tcp_stream)? {
             Some(message) => self.start_handshake(unix_time, message, nonce)?,
-            None => return Err(ConnectionError::Other(Error::MissingVersion)),
+            None => return Err(Error::MissingVersion),
         };
         for message in messages {
             write_half.write_message(message, &mut tcp_stream)?;
@@ -314,6 +314,7 @@ impl ReadTransport {
 pub enum Error {
     Deserialize(DeserializeError),
     Io(io::Error),
+    Handshake(handshake::Error),
     UnexpectedMagic(Magic),
     MissingVersion,
 }
@@ -323,6 +324,7 @@ impl Display for Error {
         match self {
             Error::Deserialize(d) => d.fmt(f),
             Error::Io(e) => e.fmt(f),
+            Error::Handshake(e) => e.fmt(f),
             Error::UnexpectedMagic(magic) => write!(f, "unexpected network magic: {magic}"),
             Error::MissingVersion => write!(f, "missing version message."),
         }
@@ -343,37 +345,8 @@ impl From<io::Error> for Error {
     }
 }
 
-#[derive(Debug)]
-pub enum ConnectionError {
-    Handshake(handshake::Error),
-    Other(Error),
-}
-
-impl Display for ConnectionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Handshake(handshake) => handshake.fmt(f),
-            Self::Other(other) => other.fmt(f),
-        }
-    }
-}
-
-impl std::error::Error for ConnectionError {}
-
-impl From<Error> for ConnectionError {
-    fn from(value: Error) -> Self {
-        Self::Other(value)
-    }
-}
-
-impl From<handshake::Error> for ConnectionError {
+impl From<handshake::Error> for Error {
     fn from(value: handshake::Error) -> Self {
         Self::Handshake(value)
-    }
-}
-
-impl From<io::Error> for ConnectionError {
-    fn from(value: io::Error) -> Self {
-        Self::Other(Error::Io(value))
     }
 }
