@@ -46,7 +46,7 @@ fn does_handshake() {
     let (mut bitcoind, socket_addr) = TestNodeBuilder::new().start();
     let _ = ConnectionConfig::new()
         .change_network(Network::Regtest)
-        .open_connection(socket_addr.into())
+        .open_connection(socket_addr)
         .unwrap();
     bitcoind.stop().unwrap();
 }
@@ -55,7 +55,7 @@ fn does_handshake() {
 fn can_accept_handshake() {
     let bind = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 8333);
     let connection = ConnectionConfig::new().change_network(Network::Regtest);
-    let wait = std::thread::spawn(move || connection.listen(bind.into()));
+    let wait = std::thread::spawn(move || connection.listen(bind));
     let (_, _) = TestNodeBuilder::new()
         .push_arg("--v2transport=0")
         .connect(bind)
@@ -69,7 +69,7 @@ fn maintain_connection() {
     let (mut bitcoind, socket_addr) = TestNodeBuilder::new().push_arg("--v2transport=0").start();
     let (writer, mut reader, _) = ConnectionConfig::new()
         .change_network(Network::Regtest)
-        .open_connection(socket_addr.into())
+        .open_connection(socket_addr)
         .unwrap();
     writer.send_message(NetworkMessage::Ping(42)).unwrap();
     reader.read_message().unwrap();

@@ -33,29 +33,29 @@ pub trait ConnectionExt: Send + Sync {
 
     fn listen(
         self,
-        bind: SocketAddr,
+        bind: impl Into<SocketAddr>,
     ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError>;
 
     fn open_connection(
         self,
-        to: SocketAddr,
+        to: impl Into<SocketAddr>,
     ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError>;
 }
 
 impl ConnectionExt for ConnectionConfig {
     fn open_connection(
         self,
-        to: SocketAddr,
+        to: impl Into<SocketAddr>,
     ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError> {
-        let tcp_stream = TcpStream::connect(to)?;
+        let tcp_stream = TcpStream::connect(to.into())?;
         Self::handshake(self, tcp_stream)
     }
 
     fn listen(
         self,
-        bind: SocketAddr,
+        bind: impl Into<SocketAddr>,
     ) -> Result<(ConnectionWriter, ConnectionReader, LiveConnection), ConnectionError> {
-        let listener = TcpListener::bind(bind)?;
+        let listener = TcpListener::bind(bind.into())?;
         let (tcp_stream, _) = listener.accept()?;
         Self::handshake(self, tcp_stream)
     }
