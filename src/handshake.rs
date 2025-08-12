@@ -32,6 +32,7 @@ pub struct ConnectionConfig {
     our_height: i32,
     fee_filter: FeeRate,
     network: Network,
+    request_addr: bool,
 }
 
 impl ConnectionConfig {
@@ -50,6 +51,7 @@ impl ConnectionConfig {
             our_height: 0,
             fee_filter: FeeRate::BROADCAST_MIN,
             network: NETWORK,
+            request_addr: false,
         }
     }
 
@@ -60,6 +62,11 @@ impl ConnectionConfig {
 
     pub fn network(&self) -> Network {
         self.network
+    }
+
+    pub fn request_addr(mut self) -> Self {
+        self.request_addr = true;
+        self
     }
 
     pub fn decrease_version_requirement(mut self, protocol_version: ProtocolVersion) -> Self {
@@ -159,6 +166,7 @@ impl ConnectionConfig {
             their_preferences: preferences,
             send_cmpct: self.send_cmpct,
             fee_filter: self.fee_filter,
+            request_addr: self.request_addr,
         };
         Ok((handshake, suggested_messages))
     }
@@ -176,6 +184,7 @@ pub(crate) struct InitializedHandshake {
     their_preferences: Arc<Preferences>,
     fee_filter: FeeRate,
     send_cmpct: SendCmpct,
+    request_addr: bool,
 }
 
 impl InitializedHandshake {
@@ -188,7 +197,10 @@ impl InitializedHandshake {
                 let verack = NetworkMessage::Verack;
                 let fee_filter = NetworkMessage::FeeFilter(self.fee_filter);
                 let send_cmpct = NetworkMessage::SendCmpct(self.send_cmpct);
-                let messages = vec![verack, send_cmpct, fee_filter];
+                let mut messages = vec![verack, send_cmpct, fee_filter];
+                if self.request_addr {
+                    messages.push(NetworkMessage::GetAddr);
+                }
                 Ok(Some((
                     CompletedHandshake {
                         feeler: self.feeler,
@@ -351,5 +363,21 @@ mod tests {
                 .start_handshake(system_time, NetworkMessage::Version(mock), nonce,)
                 .is_ok()
         )
+    }
+
+    #[test]
+    fn test_gets_addr() {
+        let mock = build_mock_version(ProtocolVersion::WTXID_RELAY_VERSION, ServiceFlags::NONE);
+        let connection_config = ConnectionConfig::new().request_addr();
+        let nonce = 43;
+        let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        let (init_handshake, _) = connection_config
+            .start_handshake(system_time, NetworkMessage::Version(mock), nonce)
+            .unwrap();
+        let (_, messages) = init_handshake
+            .negotiate(NetworkMessage::Verack)
+            .unwrap()
+            .unwrap();
+        assert!(matches!(messages.last().unwrap(), NetworkMessage::GetAddr));
     }
 }
