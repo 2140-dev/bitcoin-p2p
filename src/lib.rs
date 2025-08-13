@@ -7,6 +7,7 @@ use std::{
     time::Instant,
 };
 
+use bitcoin::Network;
 use p2p::{ProtocolVersion, ServiceFlags};
 
 /// Automated version negotiation with remote peers
@@ -227,6 +228,34 @@ impl TimedMessages {
 impl Default for TimedMessages {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+pub trait SeedsExt {
+    fn seeds(&self) -> Vec<&str>;
+}
+
+impl SeedsExt for Network {
+    fn seeds(&self) -> Vec<&str> {
+        match self {
+            Self::Bitcoin => vec![
+                "seed.bitcoin.sipa.be",
+                "dnsseed.bluematt.me",
+                "dnsseed.bitcoin.dashjr.org",
+                "seed.bitcoinstats.com",
+                "seed.bitcoin.jonasschnelli.ch",
+                "seed.btc.petertodd.org",
+                "seed.bitcoin.sprovoost.nl",
+                "dnsseed.emzy.de",
+                "seed.bitcoin.wiz.biz",
+            ],
+            Self::Signet => vec![
+                "seed.signet.bitcoin.sprovoost.nl",
+                "seed.signet.achownodes.xyz",
+            ],
+            Self::Regtest => vec![],
+            _ => unimplemented!(),
+        }
     }
 }
 
