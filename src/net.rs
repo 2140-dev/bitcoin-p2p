@@ -100,6 +100,7 @@ impl ConnectionExt for ConnectionConfig {
                             feeler,
                             their_preferences: Arc::clone(&their_preferences),
                             timed_messages: Arc::clone(&timed_messages),
+                            start_time: Instant::now(),
                         };
                         let (tx, rx) = mpsc::channel();
                         let tcp_stream_clone = tcp_stream.try_clone()?;
