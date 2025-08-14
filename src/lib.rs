@@ -1,10 +1,10 @@
 use std::{
     collections::HashMap,
     sync::{
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicU64, Ordering},
-        {Arc, Mutex},
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use bitcoin::Network;
@@ -100,6 +100,7 @@ pub struct ConnectionMetrics {
     feeler: FeelerData,
     their_preferences: Arc<Preferences>,
     timed_messages: Arc<Mutex<TimedMessages>>,
+    start_time: Instant,
 }
 
 impl ConnectionMetrics {
@@ -117,6 +118,11 @@ impl ConnectionMetrics {
     pub fn message_rate(&self, timed_message: TimedMessage) -> Option<MessageRate> {
         let lock = self.timed_messages.lock().ok()?;
         Some(*lock.message_rate(timed_message))
+    }
+
+    /// Time the connection has remained open.
+    pub fn connection_time(&self, now: Instant) -> Duration {
+        now.duration_since(self.start_time)
     }
 }
 
