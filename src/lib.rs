@@ -10,6 +10,8 @@ use std::{
 use bitcoin::Network;
 use p2p::{ProtocolVersion, ServiceFlags};
 
+pub extern crate p2p;
+
 /// Automated version negotiation with remote peers
 pub mod handshake;
 /// Networking extensions
