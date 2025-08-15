@@ -3,8 +3,8 @@ use std::{
     io::{self, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{
-        Arc, Mutex,
         mpsc::{self, SendError},
+        Arc, Mutex,
     },
     thread::JoinHandle,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -15,13 +15,13 @@ use bitcoin::{
     key::rand::random,
 };
 use p2p::{
-    Magic, NetworkExt,
     message::{NetworkMessage, RawNetworkMessage, V1MessageHeader},
+    Magic, NetworkExt,
 };
 
 use crate::{
-    ConnectionMetrics, Preferences, TimedMessage, TimedMessages,
     handshake::{self, CompletedHandshake, ConnectionConfig},
+    ConnectionMetrics, Preferences, TimedMessage, TimedMessages,
 };
 
 /// Open or begin a connection to an inbound or outbound peer.

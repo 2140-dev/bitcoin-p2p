@@ -1,7 +1,7 @@
 use std::net::{Ipv4Addr, SocketAddrV4};
 
 use bitcoin::Network;
-use corepc_node::{P2P, exe_path};
+use corepc_node::{exe_path, P2P};
 
 use bitcoin_p2p::handshake::ConnectionConfig;
 use bitcoin_p2p::net::ConnectionExt;

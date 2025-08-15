@@ -2,8 +2,8 @@ use std::net::SocketAddr;
 
 use bitcoin_p2p::{handshake::ConnectionConfig, net::ConnectionExt};
 use p2p::{
-    ProtocolVersion,
     message_network::{ClientSoftwareVersion, UserAgent, UserAgentVersion},
+    ProtocolVersion,
 };
 
 const VERSION: ClientSoftwareVersion = ClientSoftwareVersion::SemVer {

@@ -2,10 +2,10 @@ use std::{fmt::Display, sync::Arc, time::Duration};
 
 use bitcoin::{FeeRate, Network};
 use p2p::{
-    Address, ProtocolVersion, ServiceFlags,
     message::{CommandString, NetworkMessage},
     message_compact_blocks::SendCmpct,
     message_network::{Alert, ClientSoftwareVersion, UserAgent, UserAgentVersion, VersionMessage},
+    Address, ProtocolVersion, ServiceFlags,
 };
 
 use crate::{FeelerData, Preferences};
@@ -277,9 +277,9 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use p2p::{
-        ProtocolVersion, ServiceFlags,
         message::NetworkMessage,
         message_network::{UserAgent, VersionMessage},
+        ProtocolVersion, ServiceFlags,
     };
 
     use super::ConnectionConfig;
@@ -347,11 +347,9 @@ mod tests {
         let connection_config = ConnectionConfig::new();
         let nonce = 43;
         let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        assert!(
-            connection_config
-                .start_handshake(system_time, NetworkMessage::Version(mock), nonce,)
-                .is_err()
-        )
+        assert!(connection_config
+            .start_handshake(system_time, NetworkMessage::Version(mock), nonce,)
+            .is_err())
     }
 
     #[test]
@@ -361,11 +359,9 @@ mod tests {
             ConnectionConfig::new().set_service_requirement(ServiceFlags::NETWORK);
         let nonce = 43;
         let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        assert!(
-            connection_config
-                .start_handshake(system_time, NetworkMessage::Version(mock), nonce,)
-                .is_err()
-        )
+        assert!(connection_config
+            .start_handshake(system_time, NetworkMessage::Version(mock), nonce,)
+            .is_err())
     }
 
     #[test]
@@ -375,11 +371,9 @@ mod tests {
             .decrease_version_requirement(ProtocolVersion::SENDHEADERS_VERSION);
         let nonce = 43;
         let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        assert!(
-            connection_config
-                .start_handshake(system_time, NetworkMessage::Version(mock), nonce,)
-                .is_ok()
-        )
+        assert!(connection_config
+            .start_handshake(system_time, NetworkMessage::Version(mock), nonce,)
+            .is_ok())
     }
 
     #[test]

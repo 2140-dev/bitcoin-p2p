@@ -58,7 +58,7 @@ impl ValidationExt for NetworkMessage {
 #[cfg(test)]
 mod tests {
     use bitcoin::BlockHash;
-    use p2p::{ProtocolVersion, message::NetworkMessage, message_network::Alert};
+    use p2p::{message::NetworkMessage, message_network::Alert, ProtocolVersion};
 
     use crate::validation::ValidationExt;
 
