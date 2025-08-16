@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
     time::{Duration, Instant},
@@ -33,13 +33,21 @@ pub struct FeelerData {
     pub reported_height: i32,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+struct DynamicPrefernces {
+    sendheaders: bool,
+    sendaddv2: bool,
+    sendcmpct: bool,
+    sendwtxid: bool,
+}
+
 /// The peer's preferences during this connection. These are updated automatically as the peer
 /// shares information.
 #[derive(Debug)]
 pub struct Preferences {
     sendheaders: AtomicBool,
     sendaddrv2: AtomicBool,
-    sendcmpct: AtomicU64,
+    sendcmpct: AtomicBool,
     sendwtxid: AtomicBool,
 }
 
@@ -48,8 +56,17 @@ impl Preferences {
         Self {
             sendheaders: AtomicBool::new(false),
             sendaddrv2: AtomicBool::new(false),
-            sendcmpct: AtomicU64::new(0),
+            sendcmpct: AtomicBool::new(false),
             sendwtxid: AtomicBool::new(false),
+        }
+    }
+
+    fn from_dynamic(preferences: DynamicPrefernces) -> Self {
+        Self {
+            sendheaders: AtomicBool::new(preferences.sendheaders),
+            sendaddrv2: AtomicBool::new(preferences.sendaddv2),
+            sendcmpct: AtomicBool::new(preferences.sendcmpct),
+            sendwtxid: AtomicBool::new(preferences.sendwtxid),
         }
     }
 
@@ -65,8 +82,8 @@ impl Preferences {
         self.sendwtxid.store(true, Ordering::Relaxed);
     }
 
-    fn prefers_cmpct(&self, version: u64) {
-        self.sendcmpct.store(version, Ordering::Relaxed);
+    fn prefers_cmpct(&self) {
+        self.sendcmpct.store(true, Ordering::Relaxed);
     }
 
     /// The peer prefers `addrv2` messages
@@ -85,7 +102,7 @@ impl Preferences {
     }
 
     /// The reported compact block relay version
-    pub fn cmpct_version(&self) -> u64 {
+    pub fn cmpct_version(&self) -> bool {
         self.sendcmpct.load(Ordering::Relaxed)
     }
 }
