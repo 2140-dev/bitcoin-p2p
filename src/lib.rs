@@ -1,3 +1,5 @@
+//! Bitcoin Peer-to-Peer connections.
+#![warn(missing_docs)]
 use std::{
     collections::HashMap,
     sync::{
@@ -143,8 +145,15 @@ impl ConnectionMetrics {
 /// The rate at which a peer sends a particular message
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum MessageRate {
+    /// No message of this type has been received.
     NoneReceived,
-    Ongoing { count: f64, start: Instant },
+    /// The total count of messages along with the first message of this type.
+    Ongoing {
+        /// Total count of messages
+        count: f64,
+        /// The time of the first message
+        start: Instant,
+    },
 }
 
 impl MessageRate {
@@ -257,7 +266,9 @@ enum OutboundPing {
     LastReceived { then: Instant },
 }
 
+/// DNS seed provider
 pub trait SeedsExt {
+    /// List DNS seeds
     fn seeds(&self) -> Vec<&str>;
 }
 

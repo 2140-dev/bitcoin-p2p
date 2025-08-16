@@ -24,8 +24,11 @@ use crate::{
     ConnectionMetrics, OutboundPing, Preferences, TimedMessage, TimedMessages,
 };
 
+/// Maximum amount of time the peer has to seed a message after idling.
 pub const READ_TIMEOUT: Duration = Duration::from_secs(60);
+/// The interval to send a new ping message.
 pub const PING_INTERVAL: Duration = Duration::from_secs(30);
+/// The initial TCP handshake timeout.
 pub const TCP_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Open or begin a connection to an inbound or outbound peer.
@@ -151,6 +154,7 @@ impl ConnectionExt for ConnectionConfig {
     }
 }
 
+/// Configurations for ending a connection due to inactivity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TimeoutParams {
     read: Option<Duration>,
@@ -160,22 +164,27 @@ pub struct TimeoutParams {
 }
 
 impl TimeoutParams {
+    /// Construct new timeout parameters
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set the time a peer has until they have must sent a message.
     pub fn read_timeout(&mut self, timeout: Duration) {
         self.read = Some(timeout)
     }
 
+    /// Maximum amount of time it should take to write a message.
     pub fn write_timeout(&mut self, timeout: Duration) {
         self.write = Some(timeout)
     }
 
+    /// The initial TCP handshake timeout.
     pub fn tcp_handshake_timeout(&mut self, timeout: Duration) {
         self.tcp = timeout;
     }
 
+    /// How often is this peer pinged for activity
     pub fn ping_interval(&mut self, every: Duration) {
         self.ping_interval = every
     }
