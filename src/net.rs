@@ -229,7 +229,7 @@ impl OpenWriter {
                         .write_message(network_message, &mut self.tcp_stream)?;
                 }
                 Err(e) => match e {
-                    mpsc::RecvTimeoutError::Timeout => continue,
+                    mpsc::RecvTimeoutError::Timeout => (),
                     _ => return Ok(()),
                 },
             }
