@@ -24,6 +24,8 @@ use crate::{
     ConnectionMetrics, Preferences, TimedMessage, TimedMessages,
 };
 
+pub const READ_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// Open or begin a connection to an inbound or outbound peer.
 pub trait ConnectionExt: Send + Sync {
     /// Facilitate a version handshake on a potentially open connection. One use for this method is
@@ -37,12 +39,14 @@ pub trait ConnectionExt: Send + Sync {
     fn listen(
         self,
         bind: impl Into<SocketAddr>,
+        timeout_params: TimeoutParams,
     ) -> Result<(ConnectionWriter, ConnectionReader, ConnectionMetrics), Error>;
 
     /// Open an outbound connection to the specified socket address.
     fn open_connection(
         self,
         to: impl Into<SocketAddr>,
+        timeout_params: TimeoutParams,
     ) -> Result<(ConnectionWriter, ConnectionReader, ConnectionMetrics), Error>;
 }
 
@@ -50,17 +54,23 @@ impl ConnectionExt for ConnectionConfig {
     fn open_connection(
         self,
         to: impl Into<SocketAddr>,
+        timeout_params: TimeoutParams,
     ) -> Result<(ConnectionWriter, ConnectionReader, ConnectionMetrics), Error> {
         let tcp_stream = TcpStream::connect(to.into())?;
+        tcp_stream.set_read_timeout(timeout_params.read)?;
+        tcp_stream.set_write_timeout(timeout_params.write)?;
         Self::handshake(self, tcp_stream)
     }
 
     fn listen(
         self,
         bind: impl Into<SocketAddr>,
+        timeout_params: TimeoutParams,
     ) -> Result<(ConnectionWriter, ConnectionReader, ConnectionMetrics), Error> {
         let listener = TcpListener::bind(bind.into())?;
         let (tcp_stream, _) = listener.accept()?;
+        tcp_stream.set_read_timeout(timeout_params.read)?;
+        tcp_stream.set_write_timeout(timeout_params.write)?;
         Self::handshake(self, tcp_stream)
     }
 
@@ -126,6 +136,35 @@ impl ConnectionExt for ConnectionConfig {
                     None => continue,
                 }
             }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimeoutParams {
+    read: Option<Duration>,
+    write: Option<Duration>,
+}
+
+impl TimeoutParams {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn read_timeout(&mut self, timeout: Duration) {
+        self.read = Some(timeout)
+    }
+
+    pub fn write_timeout(&mut self, timeout: Duration) {
+        self.write = Some(timeout)
+    }
+}
+
+impl Default for TimeoutParams {
+    fn default() -> Self {
+        Self {
+            read: Some(READ_TIMEOUT),
+            write: None,
         }
     }
 }
@@ -286,9 +325,9 @@ impl ReadTransport {
 pub enum Error {
     /// A message was not deserialized according to protocol specifications.
     Deserialize(DeserializeError),
-    /// An IO related error occured.
+    /// An IO related error occurred.
     Io(io::Error),
-    /// An error occured during the version handshake.
+    /// An error occurred during the version handshake.
     Handshake(handshake::Error),
     /// The peer sent magic that does not belong to the current network.
     UnexpectedMagic(Magic),

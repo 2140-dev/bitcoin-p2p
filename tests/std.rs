@@ -4,7 +4,7 @@ use bitcoin::Network;
 use corepc_node::{exe_path, P2P};
 
 use bitcoin_p2p::handshake::ConnectionConfig;
-use bitcoin_p2p::net::ConnectionExt;
+use bitcoin_p2p::net::{ConnectionExt, TimeoutParams};
 use p2p::message::NetworkMessage;
 
 #[derive(Debug, Clone)]
@@ -46,7 +46,7 @@ fn does_handshake() {
     let (mut bitcoind, socket_addr) = TestNodeBuilder::new().start();
     let _ = ConnectionConfig::new()
         .change_network(Network::Regtest)
-        .open_connection(socket_addr)
+        .open_connection(socket_addr, TimeoutParams::default())
         .unwrap();
     bitcoind.stop().unwrap();
 }
@@ -55,7 +55,7 @@ fn does_handshake() {
 fn can_accept_handshake() {
     let bind = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 8333);
     let connection = ConnectionConfig::new().change_network(Network::Regtest);
-    let wait = std::thread::spawn(move || connection.listen(bind));
+    let wait = std::thread::spawn(move || connection.listen(bind, TimeoutParams::default()));
     let (_, _) = TestNodeBuilder::new()
         .push_arg("--v2transport=0")
         .connect(bind)
@@ -69,7 +69,7 @@ fn maintain_connection() {
     let (mut bitcoind, socket_addr) = TestNodeBuilder::new().push_arg("--v2transport=0").start();
     let (writer, mut reader, _) = ConnectionConfig::new()
         .change_network(Network::Regtest)
-        .open_connection(socket_addr)
+        .open_connection(socket_addr, TimeoutParams::default())
         .unwrap();
     writer.send_message(NetworkMessage::Ping(42)).unwrap();
     reader.read_message().unwrap();
