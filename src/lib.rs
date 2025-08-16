@@ -194,10 +194,10 @@ pub enum TimedMessage {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct TimedMessages(HashMap<TimedMessage, MessageRate>);
+struct TimedMessages(HashMap<TimedMessage, MessageRate>);
 
 impl TimedMessages {
-    pub(crate) fn new() -> Self {
+    fn new() -> Self {
         let mut map = HashMap::with_capacity(4);
         for key in [
             TimedMessage::BlockHeaders,
@@ -210,7 +210,7 @@ impl TimedMessages {
         Self(map)
     }
 
-    pub(crate) fn add_single(&mut self, message: TimedMessage, now: Instant) {
+    fn add_single(&mut self, message: TimedMessage, now: Instant) {
         let val = self
             .0
             .get_mut(&message)
@@ -218,7 +218,7 @@ impl TimedMessages {
         val.add_single_message(now);
     }
 
-    pub(crate) fn add_many(&mut self, message: TimedMessage, num_messages: usize, now: Instant) {
+    fn add_many(&mut self, message: TimedMessage, num_messages: usize, now: Instant) {
         let val = self
             .0
             .get_mut(&message)
@@ -226,7 +226,7 @@ impl TimedMessages {
         val.add_messages(num_messages, now);
     }
 
-    pub(crate) fn message_rate(&self, message: TimedMessage) -> &MessageRate {
+    fn message_rate(&self, message: TimedMessage) -> &MessageRate {
         self.0
             .get(&message)
             .expect("all timed messages are in the map")
