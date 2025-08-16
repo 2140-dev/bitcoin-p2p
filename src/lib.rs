@@ -103,6 +103,7 @@ pub struct ConnectionMetrics {
     their_preferences: Arc<Preferences>,
     timed_messages: Arc<Mutex<TimedMessages>>,
     start_time: Instant,
+    outbound_ping_state: Arc<Mutex<OutboundPing>>,
 }
 
 impl ConnectionMetrics {
@@ -125,6 +126,17 @@ impl ConnectionMetrics {
     /// Time the connection has remained open.
     pub fn connection_time(&self, now: Instant) -> Duration {
         now.duration_since(self.start_time)
+    }
+
+    /// Has the connection failed to respond to a ping after the given duration.
+    pub fn ping_timed_out(&self, timeout: Duration) -> bool {
+        if let Ok(lock) = self.outbound_ping_state.lock() {
+            match *lock {
+                OutboundPing::Waiting { nonce: _, then } => return then.elapsed() > timeout,
+                _ => return false,
+            }
+        }
+        false
     }
 }
 
@@ -237,6 +249,12 @@ impl Default for TimedMessages {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum OutboundPing {
+    Waiting { nonce: u64, then: Instant },
+    LastReceived { then: Instant },
 }
 
 pub trait SeedsExt {

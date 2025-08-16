@@ -21,10 +21,11 @@ use p2p::{
 
 use crate::{
     handshake::{self, CompletedHandshake, ConnectionConfig},
-    ConnectionMetrics, Preferences, TimedMessage, TimedMessages,
+    ConnectionMetrics, OutboundPing, Preferences, TimedMessage, TimedMessages,
 };
 
 pub const READ_TIMEOUT: Duration = Duration::from_secs(60);
+pub const PING_INTERVAL: Duration = Duration::from_secs(30);
 
 /// Open or begin a connection to an inbound or outbound peer.
 pub trait ConnectionExt: Send + Sync {
@@ -33,6 +34,7 @@ pub trait ConnectionExt: Send + Sync {
     fn handshake(
         self,
         tcp_stream: TcpStream,
+        timeout_params: TimeoutParams,
     ) -> Result<(ConnectionWriter, ConnectionReader, ConnectionMetrics), Error>;
 
     /// Listen for inbound connections on the specified socket address.
@@ -59,7 +61,7 @@ impl ConnectionExt for ConnectionConfig {
         let tcp_stream = TcpStream::connect(to.into())?;
         tcp_stream.set_read_timeout(timeout_params.read)?;
         tcp_stream.set_write_timeout(timeout_params.write)?;
-        Self::handshake(self, tcp_stream)
+        Self::handshake(self, tcp_stream, timeout_params)
     }
 
     fn listen(
@@ -71,12 +73,13 @@ impl ConnectionExt for ConnectionConfig {
         let (tcp_stream, _) = listener.accept()?;
         tcp_stream.set_read_timeout(timeout_params.read)?;
         tcp_stream.set_write_timeout(timeout_params.write)?;
-        Self::handshake(self, tcp_stream)
+        Self::handshake(self, tcp_stream, timeout_params)
     }
 
     fn handshake(
         self,
         mut tcp_stream: TcpStream,
+        timeout_params: TimeoutParams,
     ) -> Result<(ConnectionWriter, ConnectionReader, ConnectionMetrics), Error> {
         let system_time = SystemTime::now();
         let unix_time = system_time
@@ -102,6 +105,9 @@ impl ConnectionExt for ConnectionConfig {
                             write_half.write_message(response, &mut tcp_stream)?;
                         }
                         let timed_messages = Arc::new(Mutex::new(TimedMessages::new()));
+                        let outbound_ping = Arc::new(Mutex::new(OutboundPing::LastReceived {
+                            then: Instant::now(),
+                        }));
                         let CompletedHandshake {
                             feeler,
                             their_preferences,
@@ -111,6 +117,7 @@ impl ConnectionExt for ConnectionConfig {
                             their_preferences: Arc::clone(&their_preferences),
                             timed_messages: Arc::clone(&timed_messages),
                             start_time: Instant::now(),
+                            outbound_ping_state: Arc::clone(&outbound_ping),
                         };
                         let (tx, rx) = mpsc::channel();
                         let tcp_stream_clone = tcp_stream.try_clone()?;
@@ -118,6 +125,8 @@ impl ConnectionExt for ConnectionConfig {
                             tcp_stream: tcp_stream_clone,
                             transport: write_half,
                             receiver: rx,
+                            outbound_ping_state: Arc::clone(&outbound_ping),
+                            ping_interval: timeout_params.ping_interval,
                         };
                         let write_handle =
                             std::thread::spawn(move || open_writer.maintain_connection());
@@ -130,6 +139,7 @@ impl ConnectionExt for ConnectionConfig {
                             transport: read_half,
                             their_preferences,
                             timed_messages,
+                            outbound_ping_state: Arc::clone(&outbound_ping),
                         };
                         return Ok((writer, reader, live_connection));
                     }
@@ -144,6 +154,7 @@ impl ConnectionExt for ConnectionConfig {
 pub struct TimeoutParams {
     read: Option<Duration>,
     write: Option<Duration>,
+    ping_interval: Duration,
 }
 
 impl TimeoutParams {
@@ -158,6 +169,10 @@ impl TimeoutParams {
     pub fn write_timeout(&mut self, timeout: Duration) {
         self.write = Some(timeout)
     }
+
+    pub fn ping_interval(&mut self, every: Duration) {
+        self.ping_interval = every
+    }
 }
 
 impl Default for TimeoutParams {
@@ -165,6 +180,7 @@ impl Default for TimeoutParams {
         Self {
             read: Some(READ_TIMEOUT),
             write: None,
+            ping_interval: PING_INTERVAL,
         }
     }
 }
@@ -199,6 +215,8 @@ struct OpenWriter {
     tcp_stream: TcpStream,
     transport: WriteTransport,
     receiver: mpsc::Receiver<NetworkMessage>,
+    outbound_ping_state: Arc<Mutex<OutboundPing>>,
+    ping_interval: Duration,
 }
 
 impl OpenWriter {
@@ -215,7 +233,24 @@ impl OpenWriter {
                     _ => return Ok(()),
                 },
             }
-            // Do traffic shaping or send ping
+            if let Ok(mut ping) = self.outbound_ping_state.lock() {
+                match *ping {
+                    OutboundPing::LastReceived { then } => {
+                        if then.elapsed() > self.ping_interval {
+                            let nonce: u64 = random();
+                            self.transport
+                                .write_message(NetworkMessage::Ping(nonce), &mut self.tcp_stream)?;
+
+                            *ping = OutboundPing::Waiting {
+                                nonce,
+                                then: Instant::now(),
+                            }
+                        }
+                    }
+                    OutboundPing::Waiting { nonce: _, then: _ } => continue,
+                }
+            }
+            // Do traffic shaping or gossip addrs
         }
     }
 }
@@ -227,6 +262,7 @@ pub struct ConnectionReader {
     transport: ReadTransport,
     their_preferences: Arc<Preferences>,
     timed_messages: Arc<Mutex<TimedMessages>>,
+    outbound_ping_state: Arc<Mutex<OutboundPing>>,
 }
 
 impl ConnectionReader {
@@ -262,6 +298,19 @@ impl ConnectionReader {
                 NetworkMessage::AddrV2(list) => {
                     if let Ok(mut lock) = self.timed_messages.lock() {
                         lock.add_many(TimedMessage::Addr, list.0.len(), Instant::now());
+                    }
+                }
+                NetworkMessage::Pong(pong) => {
+                    // There are bigger problems with this connection if the lock fails, so it is
+                    // okay to ignore the nonce.
+                    if let Ok(mut lock) = self.outbound_ping_state.lock() {
+                        if let OutboundPing::Waiting { nonce, then: _ } = *lock {
+                            if *pong == nonce {
+                                *lock = OutboundPing::LastReceived {
+                                    then: Instant::now(),
+                                };
+                            }
+                        }
                     }
                 }
                 _ => (),
