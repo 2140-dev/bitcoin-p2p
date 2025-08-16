@@ -1,6 +1,9 @@
 use std::net::SocketAddr;
 
-use bitcoin_p2p::{handshake::ConnectionConfig, net::ConnectionExt};
+use bitcoin_p2p::{
+    handshake::ConnectionConfig,
+    net::{ConnectionExt, TimeoutParams},
+};
 use p2p::{
     message_network::{ClientSoftwareVersion, UserAgent, UserAgentVersion},
     ProtocolVersion,
@@ -25,7 +28,7 @@ fn main() {
     let (_, _, metadata) = ConnectionConfig::new()
         .user_agent(user_agent)
         .decrease_version_requirement(ProtocolVersion::BIP0031_VERSION)
-        .open_connection(socket_addr)
+        .open_connection(socket_addr, TimeoutParams::default())
         .expect("connection failed.");
     println!(
         "Established a connection with {socket_addr}. They offer: {}; Height: {}, Time difference in seconds: {}",
