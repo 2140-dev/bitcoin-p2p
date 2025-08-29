@@ -171,6 +171,7 @@ impl ConnectionConfig {
             services: version.services,
             net_time_difference,
             reported_height: version.start_height,
+            nonce,
         };
         let handshake = InitializedHandshake {
             feeler,

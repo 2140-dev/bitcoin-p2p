@@ -30,6 +30,8 @@ pub struct FeelerData {
     pub net_time_difference: i64,
     /// The reported height of their block chain.
     pub reported_height: i32,
+    /// The nonce used to create this connection.
+    pub nonce: u64,
 }
 
 /// The peer's preferences during this connection. These are updated automatically as the peer
