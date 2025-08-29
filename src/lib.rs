@@ -101,6 +101,15 @@ impl ConnectionMetrics {
         now.duration_since(self.start_time)
     }
 
+    /// Is the last block considered stale according to the timeout.
+    pub fn stale_block(&self, timeout: Duration) -> bool {
+        if let Ok(lock) = self.timed_messages.lock() {
+            let now = Instant::now();
+            return now.duration_since(lock.last_block) > timeout;
+        }
+        false
+    }
+
     /// Has the connection failed to respond to a ping after the given duration.
     pub fn ping_timed_out(&self, timeout: Duration) -> bool {
         if let Ok(lock) = self.outbound_ping_state.lock() {
@@ -188,10 +197,13 @@ pub enum TimedMessage {
 }
 
 #[derive(Debug, Clone)]
-struct TimedMessages(HashMap<TimedMessage, MessageRate>);
+struct TimedMessages {
+    tracked: HashMap<TimedMessage, MessageRate>,
+    last_block: Instant,
+}
 
 impl TimedMessages {
-    fn new() -> Self {
+    fn new(now: Instant) -> Self {
         let mut map = HashMap::with_capacity(4);
         for key in [
             TimedMessage::BlockHeaders,
@@ -202,12 +214,15 @@ impl TimedMessages {
         ] {
             map.insert(key, MessageRate::new());
         }
-        Self(map)
+        Self {
+            tracked: map,
+            last_block: now,
+        }
     }
 
     fn add_single(&mut self, message: TimedMessage, now: Instant) {
         let val = self
-            .0
+            .tracked
             .get_mut(&message)
             .expect("all timed messages are in the map");
         val.add_single_message(now);
@@ -215,22 +230,16 @@ impl TimedMessages {
 
     fn add_many(&mut self, message: TimedMessage, num_messages: usize, now: Instant) {
         let val = self
-            .0
+            .tracked
             .get_mut(&message)
             .expect("all timed messages are in the map");
         val.add_messages(num_messages, now);
     }
 
     fn message_rate(&self, message: TimedMessage) -> &MessageRate {
-        self.0
+        self.tracked
             .get(&message)
             .expect("all timed messages are in the map")
-    }
-}
-
-impl Default for TimedMessages {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -294,7 +303,7 @@ mod tests {
     fn test_timed_messages() {
         let now = Instant::now();
         let later = now.checked_add(Duration::from_secs(10)).unwrap();
-        let mut timed_messages = TimedMessages::new();
+        let mut timed_messages = TimedMessages::new(now);
         timed_messages.add_many(TimedMessage::Addr, 1_000, now);
         let msg_per_secs = timed_messages
             .message_rate(TimedMessage::Addr)

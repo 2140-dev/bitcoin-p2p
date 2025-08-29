@@ -109,7 +109,8 @@ impl ConnectionExt for ConnectionConfig {
                         for response in responses {
                             write_half.write_message(response, &mut tcp_stream)?;
                         }
-                        let timed_messages = Arc::new(Mutex::new(TimedMessages::new()));
+                        let timed_messages =
+                            Arc::new(Mutex::new(TimedMessages::new(Instant::now())));
                         let outbound_ping = Arc::new(Mutex::new(OutboundPing::LastReceived {
                             then: Instant::now(),
                         }));
@@ -307,6 +308,7 @@ impl ConnectionReader {
                 NetworkMessage::Headers(_) => {
                     if let Ok(mut lock) = self.timed_messages.lock() {
                         lock.add_single(TimedMessage::BlockHeaders, Instant::now());
+                        lock.last_block = Instant::now();
                     }
                 }
                 NetworkMessage::CFilter(_) => {
@@ -342,17 +344,21 @@ impl ConnectionReader {
                     let now = Instant::now();
                     if let Ok(mut lock) = self.timed_messages.lock() {
                         for inv in payload {
-                            match inv {
-                                Inventory::WTx(_) => {
-                                    lock.add_single(TimedMessage::TransactionAnnouncement, now);
-                                }
-                                Inventory::Transaction(_) => {
-                                    lock.add_single(TimedMessage::TransactionAnnouncement, now);
-                                }
-                                Inventory::WitnessTransaction(_) => {
-                                    lock.add_single(TimedMessage::TransactionAnnouncement, now);
-                                }
-                                _ => (),
+                            if matches!(
+                                inv,
+                                Inventory::WTx(_)
+                                    | Inventory::WitnessTransaction(_)
+                                    | Inventory::Transaction(_)
+                            ) {
+                                lock.add_single(TimedMessage::TransactionAnnouncement, now);
+                            }
+                            if matches!(
+                                inv,
+                                Inventory::Block(_)
+                                    | Inventory::WitnessBlock(_)
+                                    | Inventory::CompactBlock(_)
+                            ) {
+                                lock.last_block = now;
                             }
                         }
                     }
