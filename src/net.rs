@@ -16,6 +16,7 @@ use bitcoin::{
 };
 use p2p::{
     message::{NetworkMessage, RawNetworkMessage, V1MessageHeader},
+    message_blockdata::Inventory,
     Magic, NetworkExt,
 };
 
@@ -332,6 +333,26 @@ impl ConnectionReader {
                                 *lock = OutboundPing::LastReceived {
                                     then: Instant::now(),
                                 };
+                            }
+                        }
+                    }
+                }
+                NetworkMessage::Inv(payload) => {
+                    let payload = &payload.0;
+                    let now = Instant::now();
+                    if let Ok(mut lock) = self.timed_messages.lock() {
+                        for inv in payload {
+                            match inv {
+                                Inventory::WTx(_) => {
+                                    lock.add_single(TimedMessage::TransactionAnnouncement, now);
+                                }
+                                Inventory::Transaction(_) => {
+                                    lock.add_single(TimedMessage::TransactionAnnouncement, now);
+                                }
+                                Inventory::WitnessTransaction(_) => {
+                                    lock.add_single(TimedMessage::TransactionAnnouncement, now);
+                                }
+                                _ => (),
                             }
                         }
                     }
