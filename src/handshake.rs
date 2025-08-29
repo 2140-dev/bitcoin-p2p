@@ -1,4 +1,4 @@
-use std::{fmt::Display, sync::Arc, time::Duration};
+use std::{fmt::Display, time::Duration};
 
 use bitcoin::{FeeRate, Network};
 use p2p::{
@@ -68,7 +68,7 @@ impl ConnectionConfig {
         self.network
     }
 
-    /// Request the peer gossip new addresses at the beginning of the conneciton
+    /// Request the peer gossip new addresses at the beginning of the connection
     pub fn request_addr(mut self) -> Self {
         self.request_addr = true;
         self
@@ -172,10 +172,9 @@ impl ConnectionConfig {
             net_time_difference,
             reported_height: version.start_height,
         };
-        let preferences = Arc::new(Preferences::default());
         let handshake = InitializedHandshake {
             feeler,
-            their_preferences: preferences,
+            their_preferences: Preferences::default(),
             send_cmpct: self.send_cmpct,
             fee_filter: self.fee_filter,
             request_addr: self.request_addr,
@@ -193,7 +192,7 @@ impl Default for ConnectionConfig {
 #[derive(Debug, Clone)]
 pub(crate) struct InitializedHandshake {
     feeler: FeelerData,
-    their_preferences: Arc<Preferences>,
+    their_preferences: Preferences,
     fee_filter: FeeRate,
     send_cmpct: SendCmpct,
     request_addr: bool,
@@ -201,7 +200,7 @@ pub(crate) struct InitializedHandshake {
 
 impl InitializedHandshake {
     pub(crate) fn negotiate(
-        &self,
+        &mut self,
         message: NetworkMessage,
     ) -> Result<Option<(CompletedHandshake, Vec<NetworkMessage>)>, Error> {
         match message {
@@ -216,25 +215,25 @@ impl InitializedHandshake {
                 Ok(Some((
                     CompletedHandshake {
                         feeler: self.feeler,
-                        their_preferences: Arc::clone(&self.their_preferences),
+                        their_preferences: self.their_preferences,
                     },
                     messages,
                 )))
             }
             NetworkMessage::WtxidRelay => {
-                self.their_preferences.prefers_wtxid();
+                self.their_preferences.sendwtxid = true;
                 Ok(None)
             }
             NetworkMessage::SendAddrV2 => {
-                self.their_preferences.prefers_addrv2();
+                self.their_preferences.sendaddrv2 = true;
                 Ok(None)
             }
             NetworkMessage::SendCmpct(cmpct) => {
-                self.their_preferences.prefers_cmpct(cmpct.version);
+                self.their_preferences.sendcmpct = cmpct;
                 Ok(None)
             }
             NetworkMessage::SendHeaders => {
-                self.their_preferences.prefers_header_announcment();
+                self.their_preferences.sendheaders = true;
                 Ok(None)
             }
             e => Err(Error::IrrelevantMessage(e.command())),
@@ -245,7 +244,7 @@ impl InitializedHandshake {
 #[derive(Debug, Clone)]
 pub(crate) struct CompletedHandshake {
     pub(crate) feeler: FeelerData,
-    pub(crate) their_preferences: Arc<Preferences>,
+    pub(crate) their_preferences: Preferences,
 }
 
 /// Errors that occur during a handshake
@@ -307,7 +306,7 @@ mod tests {
         let connection_config = ConnectionConfig::new();
         let nonce = 43;
         let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        let (init_handshake, messages) = connection_config
+        let (mut init_handshake, messages) = connection_config
             .start_handshake(system_time, NetworkMessage::Version(mock), nonce)
             .unwrap();
         let mut message_iter = messages.into_iter();
@@ -333,9 +332,9 @@ mod tests {
         assert!(matches!(cmpct, NetworkMessage::SendCmpct(_)));
         let fee_filter = message_iter.next().unwrap();
         assert!(matches!(fee_filter, NetworkMessage::FeeFilter(_)));
-        assert!(completed.their_preferences.wtxid());
-        assert!(completed.their_preferences.addrv2());
-        assert!(!completed.their_preferences.announce_by_headers());
+        assert!(completed.their_preferences.sendwtxid);
+        assert!(completed.their_preferences.sendaddrv2);
+        assert!(!completed.their_preferences.sendheaders);
     }
 
     #[test]
@@ -382,7 +381,7 @@ mod tests {
         let connection_config = ConnectionConfig::new().request_addr();
         let nonce = 43;
         let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        let (init_handshake, _) = connection_config
+        let (mut init_handshake, _) = connection_config
             .start_handshake(system_time, NetworkMessage::Version(mock), nonce)
             .unwrap();
         let (_, messages) = init_handshake

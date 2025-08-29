@@ -2,15 +2,12 @@
 #![warn(missing_docs)]
 use std::{
     collections::HashMap,
-    sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc, Mutex,
-    },
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
 use bitcoin::Network;
-use p2p::{ProtocolVersion, ServiceFlags};
+use p2p::{message_compact_blocks::SendCmpct, ProtocolVersion, ServiceFlags};
 
 pub extern crate p2p;
 
@@ -37,58 +34,29 @@ pub struct FeelerData {
 
 /// The peer's preferences during this connection. These are updated automatically as the peer
 /// shares information.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Preferences {
-    sendheaders: AtomicBool,
-    sendaddrv2: AtomicBool,
-    sendcmpct: AtomicU64,
-    sendwtxid: AtomicBool,
+    /// Announce blocks to this peer by block header.
+    pub sendheaders: bool,
+    /// Send `Addrv2` addresses.
+    pub sendaddrv2: bool,
+    /// Compact block relay preferences.
+    pub sendcmpct: SendCmpct,
+    /// Advertise transactions by WTXID.
+    pub sendwtxid: bool,
 }
 
 impl Preferences {
     fn new() -> Self {
         Self {
-            sendheaders: AtomicBool::new(false),
-            sendaddrv2: AtomicBool::new(false),
-            sendcmpct: AtomicU64::new(0),
-            sendwtxid: AtomicBool::new(false),
+            sendheaders: false,
+            sendaddrv2: false,
+            sendcmpct: SendCmpct {
+                send_compact: false,
+                version: 0x00,
+            },
+            sendwtxid: false,
         }
-    }
-
-    fn prefers_header_announcment(&self) {
-        self.sendheaders.store(true, Ordering::Relaxed);
-    }
-
-    fn prefers_addrv2(&self) {
-        self.sendaddrv2.store(true, Ordering::Relaxed);
-    }
-
-    fn prefers_wtxid(&self) {
-        self.sendwtxid.store(true, Ordering::Relaxed);
-    }
-
-    fn prefers_cmpct(&self, version: u64) {
-        self.sendcmpct.store(version, Ordering::Relaxed);
-    }
-
-    /// The peer prefers `addrv2` messages
-    pub fn addrv2(&self) -> bool {
-        self.sendaddrv2.load(Ordering::Relaxed)
-    }
-
-    /// The peer prefers headers are announced by a `headers` message instead of `inv`
-    pub fn announce_by_headers(&self) -> bool {
-        self.sendheaders.load(Ordering::Relaxed)
-    }
-
-    /// The peer prefers witness transaction IDs
-    pub fn wtxid(&self) -> bool {
-        self.sendwtxid.load(Ordering::Relaxed)
-    }
-
-    /// The reported compact block relay version
-    pub fn cmpct_version(&self) -> u64 {
-        self.sendcmpct.load(Ordering::Relaxed)
     }
 }
 
@@ -102,7 +70,7 @@ impl Default for Preferences {
 #[derive(Debug, Clone)]
 pub struct ConnectionMetrics {
     feeler: FeelerData,
-    their_preferences: Arc<Preferences>,
+    their_preferences: Arc<Mutex<Preferences>>,
     timed_messages: Arc<Mutex<TimedMessages>>,
     start_time: Instant,
     outbound_ping_state: Arc<Mutex<OutboundPing>>,
@@ -114,9 +82,10 @@ impl ConnectionMetrics {
         &self.feeler
     }
 
-    /// Their current preferences for message exchange
-    pub fn their_preferences(&self) -> &Preferences {
-        self.their_preferences.as_ref()
+    /// Their current preferences for message exchange, if not currently being mutated.
+    pub fn their_preferences(&self) -> Option<Preferences> {
+        let pref = self.their_preferences.lock().ok();
+        pref.as_deref().copied()
     }
 
     /// The message rate for a time-sensitive message
@@ -300,7 +269,7 @@ impl SeedsExt for Network {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use crate::{MessageRate, Preferences, TimedMessage, TimedMessages};
+    use crate::{MessageRate, TimedMessage, TimedMessages};
 
     #[test]
     fn test_message_rate() {
@@ -314,17 +283,6 @@ mod tests {
         assert_eq!(rate.messages_per_secs(later).unwrap(), 1.);
         rate.add_messages(10, later);
         assert_eq!(rate.messages_per_secs(later).unwrap(), 2.);
-    }
-
-    #[test]
-    fn test_preferences() {
-        let pref = Preferences::new();
-        pref.prefers_wtxid();
-        pref.prefers_addrv2();
-        pref.prefers_header_announcment();
-        assert!(pref.addrv2());
-        assert!(pref.announce_by_headers());
-        assert!(pref.wtxid());
     }
 
     #[test]
