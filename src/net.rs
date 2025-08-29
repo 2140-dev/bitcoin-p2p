@@ -94,7 +94,7 @@ impl ConnectionExt for ConnectionConfig {
         let mut write_half = WriteTransport::V1(self.network().default_network_magic());
         let mut read_half = ReadTransport::V1(self.network().default_network_magic());
         write_half.write_message(NetworkMessage::Version(version), &mut tcp_stream)?;
-        let (handshake, messages) = match read_half.read_message(&mut tcp_stream)? {
+        let (mut handshake, messages) = match read_half.read_message(&mut tcp_stream)? {
             Some(message) => self.start_handshake(unix_time, message, nonce)?,
             None => return Err(Error::MissingVersion),
         };
@@ -116,9 +116,10 @@ impl ConnectionExt for ConnectionConfig {
                             feeler,
                             their_preferences,
                         } = completed_handshake;
+                        let arc_pref = Arc::new(Mutex::new(their_preferences));
                         let live_connection = ConnectionMetrics {
                             feeler,
-                            their_preferences: Arc::clone(&their_preferences),
+                            their_preferences: Arc::clone(&arc_pref),
                             timed_messages: Arc::clone(&timed_messages),
                             start_time: Instant::now(),
                             outbound_ping_state: Arc::clone(&outbound_ping),
@@ -141,7 +142,7 @@ impl ConnectionExt for ConnectionConfig {
                         let reader = ConnectionReader {
                             tcp_stream,
                             transport: read_half,
-                            their_preferences,
+                            their_preferences: Arc::clone(&arc_pref),
                             timed_messages,
                             outbound_ping_state: Arc::clone(&outbound_ping),
                         };
@@ -276,7 +277,7 @@ impl OpenWriter {
 pub struct ConnectionReader {
     tcp_stream: TcpStream,
     transport: ReadTransport,
-    their_preferences: Arc<Preferences>,
+    their_preferences: Arc<Mutex<Preferences>>,
     timed_messages: Arc<Mutex<TimedMessages>>,
     outbound_ping_state: Arc<Mutex<OutboundPing>>,
 }
@@ -287,9 +288,15 @@ impl ConnectionReader {
         let message = self.transport.read_message(&mut self.tcp_stream)?;
         if let Some(message) = &message {
             match message {
-                NetworkMessage::SendHeaders => self.their_preferences.prefers_header_announcment(),
+                NetworkMessage::SendHeaders => {
+                    if let Ok(mut lock) = self.their_preferences.lock() {
+                        lock.sendheaders = true;
+                    }
+                }
                 NetworkMessage::SendCmpct(cmpct) => {
-                    self.their_preferences.prefers_cmpct(cmpct.version)
+                    if let Ok(mut lock) = self.their_preferences.lock() {
+                        lock.sendcmpct = *cmpct;
+                    }
                 }
                 NetworkMessage::Block(_) => {
                     if let Ok(mut lock) = self.timed_messages.lock() {

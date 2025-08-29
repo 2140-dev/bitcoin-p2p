@@ -61,7 +61,7 @@ fn can_accept_handshake() {
         .connect(bind)
         .start();
     let (_, _, metadata) = wait.join().unwrap().unwrap();
-    assert!(metadata.their_preferences().wtxid());
+    assert!(metadata.their_preferences().unwrap().sendwtxid);
 }
 
 #[test]
