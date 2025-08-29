@@ -181,8 +181,10 @@ pub enum TimedMessage {
     CFilters,
     /// Bitcoin blocks
     Block,
-    /// Potential peers on the network
+    /// Potential peers on the network, either `addr` or `addrv2`.
     Addr,
+    /// Transaction announcements by `Tx`, `WTx`, or `WitnessTransaction`.
+    TransactionAnnouncement,
 }
 
 #[derive(Debug, Clone)]
@@ -196,6 +198,7 @@ impl TimedMessages {
             TimedMessage::CFilters,
             TimedMessage::Block,
             TimedMessage::Addr,
+            TimedMessage::TransactionAnnouncement,
         ] {
             map.insert(key, MessageRate::new());
         }
