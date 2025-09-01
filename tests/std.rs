@@ -1,6 +1,7 @@
-use std::net::{Ipv4Addr, SocketAddrV4};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 
 use bitcoin::Network;
+use bitcoin_p2p::dns::DnsQueryExt;
 use corepc_node::{exe_path, P2P};
 
 use bitcoin_p2p::handshake::ConnectionConfig;
@@ -74,4 +75,12 @@ fn maintain_connection() {
     writer.send_message(NetworkMessage::Ping(42)).unwrap();
     reader.read_message().unwrap();
     bitcoind.stop().unwrap();
+}
+
+#[test]
+fn dns_responds() {
+    let network = Network::Signet;
+    let cloudflare = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 53);
+    let peers = network.query_dns_seeds(cloudflare);
+    assert!(!peers.is_empty())
 }

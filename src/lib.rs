@@ -6,11 +6,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bitcoin::Network;
 use p2p::{message_compact_blocks::SendCmpct, ProtocolVersion, ServiceFlags};
 
 pub extern crate p2p;
 
+/// Make bitcoin-specific DNS queries
+pub mod dns;
 /// Automated version negotiation with remote peers
 pub mod handshake;
 /// Networking extensions
@@ -247,36 +248,6 @@ impl TimedMessages {
 enum OutboundPing {
     Waiting { nonce: u64, then: Instant },
     LastReceived { then: Instant },
-}
-
-/// DNS seed provider
-pub trait SeedsExt {
-    /// List DNS seeds
-    fn seeds(&self) -> Vec<&str>;
-}
-
-impl SeedsExt for Network {
-    fn seeds(&self) -> Vec<&str> {
-        match self {
-            Self::Bitcoin => vec![
-                "seed.bitcoin.sipa.be",
-                "dnsseed.bluematt.me",
-                "dnsseed.bitcoin.dashjr.org",
-                "seed.bitcoinstats.com",
-                "seed.bitcoin.jonasschnelli.ch",
-                "seed.btc.petertodd.org",
-                "seed.bitcoin.sprovoost.nl",
-                "dnsseed.emzy.de",
-                "seed.bitcoin.wiz.biz",
-            ],
-            Self::Signet => vec![
-                "seed.signet.bitcoin.sprovoost.nl",
-                "seed.signet.achownodes.xyz",
-            ],
-            Self::Regtest => vec![],
-            _ => unimplemented!(),
-        }
-    }
 }
 
 #[cfg(test)]
