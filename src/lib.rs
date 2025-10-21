@@ -8,7 +8,7 @@ use std::{
 
 use p2p::{message_compact_blocks::SendCmpct, ProtocolVersion, ServiceFlags};
 
-pub extern crate p2p;
+pub extern crate p2p as p2p_message_types;
 
 /// Make bitcoin-specific DNS queries
 pub mod dns;
