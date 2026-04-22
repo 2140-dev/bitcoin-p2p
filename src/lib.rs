@@ -6,9 +6,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use p2p::{message_compact_blocks::SendCmpct, ProtocolVersion, ServiceFlags};
-
-pub extern crate p2p as p2p_message_types;
+use bitcoin::p2p::{
+    message::CommandString, message_compact_blocks::SendCmpct, Magic, ServiceFlags,
+};
+use handshake::ProtocolVersion;
+use validation::impl_consensus_encoding;
 
 /// Make bitcoin-specific DNS queries
 pub mod dns;
@@ -18,6 +20,21 @@ pub mod handshake;
 pub mod net;
 /// Tools for validating messages and data
 pub mod validation;
+
+/// A v1 message header used to describe the incoming payload.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct V1MessageHeader {
+    /// The network magic, a unique 4 byte sequence.
+    magic: Magic,
+    /// The "command" used to describe the payload.
+    command: CommandString,
+    /// The length of the payload.
+    length: u32,
+    /// A checksum to the aforementioned data.
+    checksum: [u8; 4],
+}
+
+impl_consensus_encoding!(V1MessageHeader, magic, command, length, checksum);
 
 /// The static data related to a connection. Note that this is referred to as "feeler" data because
 /// it may be used to collect data on very short-lived connections.

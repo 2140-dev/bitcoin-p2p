@@ -3,9 +3,9 @@ use std::net::{Ipv4Addr, SocketAddrV4};
 use bitcoin::Network;
 use corepc_node::{exe_path, P2P};
 
+use bitcoin::p2p::message::NetworkMessage;
 use bitcoin_p2p::handshake::ConnectionConfig;
 use bitcoin_p2p::net::{ConnectionExt, TimeoutParams};
-use p2p::message::NetworkMessage;
 
 #[derive(Debug, Clone)]
 struct TestNodeBuilder<'a> {

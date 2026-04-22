@@ -7,8 +7,7 @@ edition = "2021"
 name = "bitcoin_p2p"
 
 [dependencies]
-bitcoin = { git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "16cc257c3695dea0e7301a5fa9cab44b8ed60598", features = ["rand-std"] }
-p2p = { package = "bitcoin-p2p-messages",  git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "16cc257c3695dea0e7301a5fa9cab44b8ed60598" }
+bitcoin = { version = "0.32.8", features = ["rand-std"] }
 
 [dev-dependencies]
 corepc-node = { version = "0.8.0", default-features = false, features = [

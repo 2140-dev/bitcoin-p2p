@@ -4,17 +4,6 @@ use bitcoin_p2p::{
     handshake::ConnectionConfig,
     net::{ConnectionExt, TimeoutParams},
 };
-use p2p::{
-    message_network::{ClientSoftwareVersion, UserAgent, UserAgentVersion},
-    ProtocolVersion,
-};
-
-const VERSION: ClientSoftwareVersion = ClientSoftwareVersion::SemVer {
-    major: 0,
-    minor: 1,
-    revision: 0,
-};
-const AGENT_VERSION: UserAgentVersion = UserAgentVersion::new(VERSION);
 
 fn main() {
     let mut args = std::env::args();
@@ -24,10 +13,9 @@ fn main() {
         .expect("Usage: provide a socket address to a bitcoin peer");
     let socket_addr = peer.parse::<SocketAddr>().expect("invalid socket address");
 
-    let user_agent = UserAgent::new("rust-example", AGENT_VERSION);
     let (_, _, metadata) = ConnectionConfig::new()
-        .user_agent(user_agent)
-        .decrease_version_requirement(ProtocolVersion::BIP0031_VERSION)
+        .user_agent("/bitcoin-p2p-example:0.1.0/".to_string())
+        .decrease_version_requirement(70013)
         .open_connection(socket_addr, TimeoutParams::default())
         .expect("connection failed.");
     println!(

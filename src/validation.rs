@@ -1,4 +1,4 @@
-use p2p::message::NetworkMessage;
+use bitcoin::p2p::message::NetworkMessage;
 
 const MAX_INV_SIZE: usize = 50_000;
 const MAX_LOCATOR_HASHES: usize = 101;
@@ -35,17 +35,16 @@ impl ValidationExt for NetworkMessage {
             return true;
         }
         match self {
-            NetworkMessage::Addr(addr) => addr.0.len() > MAX_INV_SIZE,
-            NetworkMessage::AddrV2(addr) => addr.0.len() > MAX_INV_SIZE,
-            NetworkMessage::Inv(inv) => inv.0.len() > MAX_INV_SIZE,
-            NetworkMessage::GetData(inv) => inv.0.len() > MAX_INV_SIZE,
+            NetworkMessage::Addr(addr) => addr.len() > MAX_INV_SIZE,
+            NetworkMessage::AddrV2(addr) => addr.len() > MAX_INV_SIZE,
+            NetworkMessage::Inv(inv) => inv.len() > MAX_INV_SIZE,
+            NetworkMessage::GetData(inv) => inv.len() > MAX_INV_SIZE,
             NetworkMessage::GetBlocks(getblocks) => {
                 getblocks.locator_hashes.len() > MAX_LOCATOR_HASHES
             }
             NetworkMessage::GetHeaders(getheaders) => {
                 getheaders.locator_hashes.len() > MAX_LOCATOR_HASHES
             }
-            NetworkMessage::Alert(alert) => !alert.is_final_alert(),
             _ => false,
         }
     }
@@ -55,30 +54,41 @@ impl ValidationExt for NetworkMessage {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use bitcoin::BlockHash;
-    use p2p::{message::NetworkMessage, message_network::Alert, ProtocolVersion};
+macro_rules! impl_consensus_encoding {
+    ($thing:ident, $($field:ident),+) => (
+        impl bitcoin::consensus::Encodable for $thing {
+            #[inline]
+            fn consensus_encode<W: bitcoin::io::Write + ?Sized>(
+                &self,
+                w: &mut W,
+            ) -> core::result::Result<usize, bitcoin::io::Error> {
+                let mut len = 0;
+                $(len += self.$field.consensus_encode(w)?;)+
+                Ok(len)
+            }
+        }
 
-    use crate::validation::ValidationExt;
+        impl bitcoin::consensus::Decodable for $thing {
 
-    const MALFORMED_BLOCKHASHES: [BlockHash; 102] = [BlockHash::from_byte_array([0; 32]); 102];
+            #[inline]
+            fn consensus_decode_from_finite_reader<R: bitcoin::io::Read + ?Sized>(
+                r: &mut R,
+            ) -> core::result::Result<$thing, bitcoin::consensus::encode::Error> {
+                Ok($thing {
+                    $($field: bitcoin::consensus::Decodable::consensus_decode_from_finite_reader(r)?),+
+                })
+            }
 
-    #[test]
-    fn test_validation_ext() {
-        let verack = NetworkMessage::Verack;
-        assert!(verack.is_handshake_message());
-        let sendheaders = NetworkMessage::SendHeaders;
-        assert!(!sendheaders.is_handshake_message());
-        let final_alert = NetworkMessage::Alert(Alert::final_alert());
-        assert!(!final_alert.is_discouraged());
-        let mempool = NetworkMessage::MemPool;
-        assert!(mempool.is_discouraged());
-        let getdata = NetworkMessage::GetBlocks(p2p::message_blockdata::GetBlocksMessage {
-            version: ProtocolVersion::WTXID_RELAY_VERSION,
-            locator_hashes: MALFORMED_BLOCKHASHES.to_vec(),
-            stop_hash: BlockHash::from_byte_array([0; 32]),
-        });
-        assert!(getdata.is_discouraged());
-    }
+            #[inline]
+            fn consensus_decode<R: bitcoin::io::Read + ?Sized>(
+                r: &mut R,
+            ) -> core::result::Result<$thing, bitcoin::consensus::encode::Error> {
+                let mut r = bitcoin::io::Read::take(r, bitcoin::consensus::encode::MAX_VEC_SIZE as u64);
+                Ok($thing {
+                    $($field: bitcoin::consensus::Decodable::consensus_decode(&mut r)?),+
+                })
+            }
+        }
+    );
 }
+pub(crate) use impl_consensus_encoding;

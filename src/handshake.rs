@@ -1,25 +1,38 @@
-use std::{fmt::Display, time::Duration};
+use std::{
+    fmt::Display,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    time::Duration,
+};
 
-use bitcoin::{FeeRate, Network};
-use p2p::{
+use bitcoin::p2p::{
     message::{CommandString, NetworkMessage},
     message_compact_blocks::SendCmpct,
-    message_network::{Alert, ClientSoftwareVersion, UserAgent, UserAgentVersion, VersionMessage},
-    Address, ProtocolVersion, ServiceFlags,
+    message_network::VersionMessage,
+    Address, ServiceFlags,
 };
+use bitcoin::Network;
 
 use crate::{FeelerData, Preferences};
 
 const NETWORK: Network = Network::Bitcoin;
-const UNREACHABLE: Address = Address::useless();
-const AGENT_VERSION: UserAgentVersion = UserAgentVersion::new(ClientSoftwareVersion::SemVer {
-    major: 0,
-    minor: 1,
-    revision: 0,
-});
-const CLIENT_NAME: &str = "SwiftSync";
 const SERVICES: ServiceFlags = ServiceFlags::NONE;
-const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion::WTXID_RELAY_VERSION;
+
+fn useless_address() -> Address {
+    let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    let socket_addr = SocketAddr::new(ip, 1);
+    Address::new(&socket_addr, ServiceFlags::NONE)
+}
+
+/// Version of the Bitcoin protocol.
+pub type ProtocolVersion = u32;
+
+trait ProtocolVersionExt {
+    const WTXID_RELAY_VERSION: u32 = 70016;
+    const SENDHEADERS_VERSION: u32 = 70012;
+    const MIN_PEER_PROTO_VERSION: u32 = 31800;
+}
+
+impl ProtocolVersionExt for u32 {}
 
 /// Build a connection according to a list of preferences
 #[derive(Debug, Clone)]
@@ -29,9 +42,9 @@ pub struct ConnectionConfig {
     expected_version: ProtocolVersion,
     expected_services: ServiceFlags,
     send_cmpct: SendCmpct,
-    user_agent: UserAgent,
+    user_agent: String,
     our_height: i32,
-    fee_filter: FeeRate,
+    fee_filter: i64,
     network: Network,
     request_addr: bool,
 }
@@ -39,19 +52,18 @@ pub struct ConnectionConfig {
 impl ConnectionConfig {
     /// Start a new connection on the bitcoin network
     pub fn new() -> Self {
-        let user_agent = UserAgent::new(CLIENT_NAME, AGENT_VERSION);
         Self {
-            our_version: PROTOCOL_VERSION,
+            our_version: ProtocolVersion::WTXID_RELAY_VERSION,
             our_services: SERVICES,
-            expected_version: PROTOCOL_VERSION,
+            expected_version: ProtocolVersion::WTXID_RELAY_VERSION,
             expected_services: SERVICES,
             send_cmpct: SendCmpct {
                 send_compact: false,
                 version: 0,
             },
-            user_agent,
+            user_agent: "/bitcoin-p2p:0.1.0/".to_string(),
             our_height: 0,
-            fee_filter: FeeRate::BROADCAST_MIN,
+            fee_filter: 0,
             network: NETWORK,
             request_addr: false,
         }
@@ -93,7 +105,7 @@ impl ConnectionConfig {
     }
 
     /// Set a custom user agent describing this software
-    pub fn user_agent(mut self, user_agent: UserAgent) -> Self {
+    pub fn user_agent(mut self, user_agent: String) -> Self {
         self.user_agent = user_agent;
         self
     }
@@ -110,8 +122,8 @@ impl ConnectionConfig {
         self
     }
 
-    /// Advertise the minimum fee rate required to gossip transactions
-    pub fn fee_filter(mut self, fee_filter: FeeRate) -> Self {
+    /// Advertise the minimum fee rate required to gossip transactions in sat/kilobyte
+    pub fn fee_filter(mut self, fee_filter: i64) -> Self {
         self.fee_filter = fee_filter;
         self
     }
@@ -121,8 +133,8 @@ impl ConnectionConfig {
             version: self.our_version,
             services: self.our_services,
             timestamp: unix_time.as_secs() as i64,
-            receiver: UNREACHABLE,
-            sender: UNREACHABLE,
+            receiver: useless_address(),
+            sender: useless_address(),
             nonce,
             user_agent: self.user_agent.clone(),
             start_height: self.our_height,
@@ -157,13 +169,11 @@ impl ConnectionConfig {
             suggested_messages.push(NetworkMessage::WtxidRelay);
         }
         // Weird case where this number is not a constant in Bitcoin Core
-        if effective_version >= ProtocolVersion::from_nonstandard(70016) {
+        if effective_version >= 70016 {
             suggested_messages.push(NetworkMessage::SendAddrV2);
         }
         if effective_version >= ProtocolVersion::SENDHEADERS_VERSION {
             suggested_messages.push(NetworkMessage::SendHeaders);
-        } else {
-            suggested_messages.push(NetworkMessage::Alert(Alert::final_alert()));
         }
         let net_time_difference = unix_time.as_secs_f64() as i64 - version.timestamp;
         let feeler = FeelerData {
@@ -194,7 +204,7 @@ impl Default for ConnectionConfig {
 pub(crate) struct InitializedHandshake {
     feeler: FeelerData,
     their_preferences: Preferences,
-    fee_filter: FeeRate,
+    fee_filter: i64,
     send_cmpct: SendCmpct,
     request_addr: bool,
 }
@@ -276,13 +286,9 @@ impl Display for Error {
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use p2p::{
-        message::NetworkMessage,
-        message_network::{UserAgent, VersionMessage},
-        ProtocolVersion, ServiceFlags,
-    };
+    use bitcoin::p2p::{message::NetworkMessage, message_network::VersionMessage, ServiceFlags};
 
-    use super::ConnectionConfig;
+    use super::{useless_address, ConnectionConfig, ProtocolVersion, ProtocolVersionExt};
 
     fn build_mock_version(
         with_version: ProtocolVersion,
@@ -292,10 +298,10 @@ mod tests {
             version: with_version,
             services: with_services,
             timestamp: 222222222,
-            receiver: p2p::Address::useless(),
-            sender: p2p::Address::useless(),
+            receiver: useless_address(),
+            sender: useless_address(),
             nonce: 42,
-            user_agent: UserAgent::from_nonstandard("hello"),
+            user_agent: "hello".into(),
             start_height: 0,
             relay: false,
         }
@@ -340,10 +346,7 @@ mod tests {
 
     #[test]
     fn test_reject_low_version() {
-        let mock = build_mock_version(
-            ProtocolVersion::INVALID_CB_NO_BAN_VERSION,
-            ServiceFlags::NONE,
-        );
+        let mock = build_mock_version(70015, ServiceFlags::NONE);
         let connection_config = ConnectionConfig::new();
         let nonce = 43;
         let system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();

@@ -10,19 +10,16 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use bitcoin::{
-    consensus::{self, DeserializeError},
-    key::rand::random,
-};
-use p2p::{
-    message::{NetworkMessage, RawNetworkMessage, V1MessageHeader},
+use bitcoin::p2p::{
+    message::{NetworkMessage, RawNetworkMessage},
     message_blockdata::Inventory,
-    Magic, NetworkExt,
+    Magic,
 };
+use bitcoin::{consensus::encode::Error as DeserializeError, key::rand::random};
 
 use crate::{
     handshake::{self, CompletedHandshake, ConnectionConfig},
-    ConnectionMetrics, OutboundPing, Preferences, TimedMessage, TimedMessages,
+    ConnectionMetrics, OutboundPing, Preferences, TimedMessage, TimedMessages, V1MessageHeader,
 };
 
 /// Maximum amount of time the peer has to seed a message after idling.
@@ -92,8 +89,8 @@ impl ConnectionExt for ConnectionConfig {
             .expect("time cannot go backwards.");
         let nonce = random();
         let version = self.build_our_version(unix_time, nonce);
-        let mut write_half = WriteTransport::V1(self.network().default_network_magic());
-        let mut read_half = ReadTransport::V1(self.network().default_network_magic());
+        let mut write_half = WriteTransport::V1(self.network().magic());
+        let mut read_half = ReadTransport::V1(self.network().magic());
         write_half.write_message(NetworkMessage::Version(version), &mut tcp_stream)?;
         let tcp_stream_clone = tcp_stream.try_clone()?;
         let mut buf_reader = BufReader::new(tcp_stream_clone);
@@ -335,12 +332,12 @@ impl ConnectionReader {
                 }
                 NetworkMessage::Addr(list) => {
                     if let Ok(mut lock) = self.timed_messages.lock() {
-                        lock.add_many(TimedMessage::Addr, list.0.len(), Instant::now());
+                        lock.add_many(TimedMessage::Addr, list.len(), Instant::now());
                     }
                 }
                 NetworkMessage::AddrV2(list) => {
                     if let Ok(mut lock) = self.timed_messages.lock() {
-                        lock.add_many(TimedMessage::Addr, list.0.len(), Instant::now());
+                        lock.add_many(TimedMessage::Addr, list.len(), Instant::now());
                     }
                 }
                 NetworkMessage::Pong(pong) => {
@@ -357,7 +354,6 @@ impl ConnectionReader {
                     }
                 }
                 NetworkMessage::Inv(payload) => {
-                    let payload = &payload.0;
                     let now = Instant::now();
                     if let Ok(mut lock) = self.timed_messages.lock() {
                         for inv in payload {
@@ -401,7 +397,7 @@ impl WriteTransport {
         match self {
             WriteTransport::V1(magic) => {
                 let raw = RawNetworkMessage::new(*magic, network_message);
-                let bytes = consensus::serialize(&raw);
+                let bytes = bitcoin::consensus::serialize(&raw);
                 writer.write_all(&bytes)?;
                 writer.flush()?;
                 Ok(())
@@ -424,7 +420,8 @@ impl ReadTransport {
             ReadTransport::V1(magic) => {
                 let mut message_buf = vec![0; 24];
                 reader.read_exact(&mut message_buf)?;
-                let message_header = consensus::deserialize::<V1MessageHeader>(&message_buf)?;
+                let message_header =
+                    bitcoin::consensus::deserialize::<V1MessageHeader>(&message_buf)?;
                 if message_header.magic != *magic {
                     return Err(Error::UnexpectedMagic(message_header.magic));
                 }
@@ -432,7 +429,7 @@ impl ReadTransport {
                 let mut contents_buf = vec![0; message_header.length as usize];
                 reader.read_exact(&mut contents_buf)?;
                 message_buf.extend_from_slice(&contents_buf);
-                let message = consensus::deserialize::<RawNetworkMessage>(&message_buf)?;
+                let message = bitcoin::consensus::deserialize::<RawNetworkMessage>(&message_buf)?;
                 Ok(Some(message.into_payload()))
             }
         }
