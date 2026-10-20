@@ -1,5 +1,9 @@
 # Facilitated Bitcoin Peer-to-Peer Messaging
 
+**This repository is no longer maintained**
+
+> Development of this crate now occurs within [`kernel-node`](https://github.com/kernel-node/kernel-node).
+
 Two bitcoin nodes may exchange a number of messages during the lifetime of a connection, however most of them are related to negotiating services and protocol messages. This crate aims to automate this process, among other quality of life improvements. With the introduction of encrypted messaging over the Bitcoin network, and probable traffic shaping in the near future, connections between two bitcoin peers is made even more complex.
 
 ## Goals
